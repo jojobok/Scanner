@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>סיפורי אמונה וביטחון</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Segoe UI', 'Arial Hebrew', sans-serif; }
+  .badge-verified { background:#e6f7ee; color:#1a9d5c; }
+  .badge-warn { color:#b5860b; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm">
+  <div class="max-w-5xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg">א</div>
+      <div>
+        <h1 class="text-xl font-bold leading-tight">סיפורי אמונה וביטחון</h1>
+        <p class="text-xs text-slate-500">חלון חיפוש: 24 השעות האחרונות</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <span id="clock" class="text-sm text-slate-600"></span>
+      <button id="scanBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
+        סריקה חדשה
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-5xl mx-auto px-4 pt-4">
+  <div id="categoryFilters" class="flex flex-wrap gap-2 mb-2"></div>
+  <div id="extraToggles" class="flex flex-wrap gap-2"></div>
+</div>
+
+<main class="max-w-5xl mx-auto px-4 py-6 space-y-4">
+  <div class="flex items-center justify-between text-sm text-slate-500">
+    <span id="statusLine">טוען...</span>
+  </div>
+
+  <div id="mockNotice" class="hidden bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-2">
+    מצב הדגמה (Mock): מוצגות דוגמאות בלבד. כדי לחבר נתונים אמיתיים יש לחבר API של Telegram / Search / מחולל תמונות
+    (ראו את קובץ ה-README).
+  </div>
+
+  <div id="cards" class="grid gap-4"></div>
+  <div id="emptyState" class="hidden text-center text-slate-400 py-16">
+    לא נמצאו סיפורים בפילטרים הנוכחיים. נסה/י לשנות פילטרים או להריץ סריקה חדשה.
+  </div>
+</main>
+
+<script>
+// ---------------------------------------------------------------------
+// גרסה פשוטה, קובץ יחיד, ללא שרת - כל הלוגיקה רצה בדפדפן.
+// המידע כאן הוא Mock (דוגמאות) בלבד - כדי לחבר מקורות אמיתיים
+// (טלגרם / Search API / מחולל תמונות) צריך שרת Backend, ראו README.
+// ---------------------------------------------------------------------
+
+const CATEGORIES = ["הכל","אמונה","ניסים","Public Safety","חיילים","הצלה","מפורסמים","תפילה","תפילין","שבת","חסד","בשורות טובות"];
+const TOGGLES = ["רק עם תמונה","רק מקור ראשון","עד 6 שעות","עד 12 שעות","עד 24 שעות"];
+
+let activeCategory = "הכל";
+let activeToggles = new Set();
+let publishedIds = new Set();
+let items = [];
+
+function hoursAgoISO(h) {
+  return new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
+}
+
+function formatTimeAgo(hours) {
+  const whole = Math.floor(hours);
+  const minutes = Math.round((hours - whole) * 60);
+  if (whole <= 0) return `פורסם לפני ${minutes} דקות`;
+  if (minutes === 0) return `פורסם לפני ${whole} שעות`;
+  return `פורסם לפני ${whole} שעות ו-${minutes} דקות`;
+}
+
+function buildImagePrompt(title) {
+  return `${title}. Vertical 9:16, digital photorealistic, HD, cinematic lighting, Israeli setting, ` +
+    `authentic human emotion, no blood, no graphic injuries, no horror, no religious symbols other than Jewish, ` +
+    `do not depict a real identifiable person, must look like an illustrative AI image, not an actual photo of the event.`;
+}
+
+function makeMockItems() {
+  const raw = [
+    {
+      title: "חובש מד\"א הגיע תוך דקות וחילץ ילדה שנפלה למרתף בירושלים",
+      source: "מד\"א דוברות (ערוץ ציבורי לדוגמה)",
+      url: "https://t.me/example_mda_channel/1234",
+      hours: 3.3,
+      category: ["הצלה","Public Safety","ניסים"],
+      status: "מקור ראשון",
+      hasImage: false,
+      angle: "רגע של חסד והשגחה פרטית באמצע שגרה מאתגרת.",
+      fb: "לפעמים, בדיוק ברגע הנכון...\n\nחובש מד\"א הגיע תוך דקות וחילץ ילדה שנפלה למרתף בירושלים.\n\nזכות תגן על כל מצילי ישראל. 🙏",
+    },
+    {
+      title: "שוטר וחייל הניחו תפילין יחד לפני משמרת משותפת בגבול הצפון",
+      source: "פיקוד העורף עדכונים (ערוץ ציבורי לדוגמה)",
+      url: "https://t.me/example_pikud_channel/5678",
+      hours: 9.1,
+      category: ["חיילים","תפילין","אמונה"],
+      status: "מקור ראשון",
+      hasImage: true,
+      angle: "זכות תגן עלינו - רגע אמונה בין שני שומרי סף.",
+      fb: "רגע לפני שהיום נגמר - סיפור שחייבים לספר.\n\nשוטר וחייל הניחו תפילין יחד לפני משמרת משותפת בגבול הצפון.\n\nזכות תגן עלינו. 🙏",
+    },
+    {
+      title: "לוחמי חילוץ הצילו משפחה שנקלעה לשיטפון בנחל בדרום",
+      source: "דובר צה\"ל - אתר רשמי",
+      url: "https://example.gov.il/idf-spokesperson/rescue-story",
+      hours: 6.7,
+      category: ["הצלה","Public Safety"],
+      status: "מקור ראשון",
+      hasImage: false,
+      angle: "פעולה מהירה ומתואמת שהצילה חיים.",
+      fb: "סיפור קצר שנוגע ללב:\n\nלוחמי חילוץ הצילו משפחה שנקלעה לשיטפון בנחל בדרום.\n\nתודה לצוותי ההצלה. 🙏",
+    },
+    {
+      title: "חייל שנפצע בעבר שב לשרת ומספר: 'ההודיה לה׳ היא מה שמחזיק אותי'",
+      source: "אתר חדשות לדוגמה",
+      url: "https://example-news.co.il/article/soldier-thanks-god",
+      hours: 14.2,
+      category: ["חיילים","אמונה","תפילה"],
+      status: "חדש",
+      hasImage: false,
+      angle: "תפילת תהילים כליווי בתקופת שיקום.",
+      fb: "לפעמים, בדיוק ברגע הנכון...\n\nחייל שנפצע בעבר שב לשרת ומספר על הודיה לה' שמחזיקה אותו.\n\n🙏",
+    },
+  ];
+
+  return raw.map((r, i) => {
+    const hoursSince = r.hours;
+    return {
+      id: "item-" + i,
+      title: r.title,
+      source: r.source,
+      url: r.url,
+      publishedIso: hoursAgoISO(hoursSince),
+      hoursSince,
+      category: r.category,
+      status: r.status,
+      matchScore: Math.round(70 + Math.random() * 20),
+      whyItFits: "הסיפור משלב זווית אנושית/אמונית ורלוונטיות ל-Public Safety, ומתאים לקהל היעד של העמוד.",
+      angle: r.angle,
+      fbTitle: r.title,
+      reelHook: r.title.split(" ").slice(0,6).join(" ") + "...",
+      fbPost: r.fb,
+      waText: r.title + "\nלפרטים: " + r.url,
+      hashtags: ["#ישראל", "#אמונה_וביטחון"].concat(
+        r.category.includes("חיילים") ? ["#צה״ל"] : [],
+        r.category.includes("הצלה") ? ["#הצלת_חיים"] : []
+      ),
+      hasImage: r.hasImage,
+      aiPrompt: buildImagePrompt(r.title),
+    };
+  });
+}
+
+function renderFilters() {
+  const catWrap = document.getElementById("categoryFilters");
+  catWrap.innerHTML = "";
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.textContent = cat;
+    btn.className = "px-3 py-1.5 rounded-full text-sm border " +
+      (activeCategory === cat ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-300");
+    btn.onclick = () => { activeCategory = cat; renderFilters(); renderCards(); };
+    catWrap.appendChild(btn);
+  });
+
+  const togWrap = document.getElementById("extraToggles");
+  togWrap.innerHTML = "";
+  TOGGLES.forEach(t => {
+    const btn = document.createElement("button");
+    btn.textContent = t;
+    btn.className = "px-3 py-1 rounded-md text-xs border " +
+      (activeToggles.has(t) ? "bg-slate-800 text-white border-slate-800" : "bg-slate-100 text-slate-600 border-slate-200");
+    btn.onclick = () => {
+      activeToggles.has(t) ? activeToggles.delete(t) : activeToggles.add(t);
+      renderFilters(); renderCards();
+    };
+    togWrap.appendChild(btn);
+  });
+}
+
+function visibleItems() {
+  return items
+    .filter(i => !publishedIds.has(i.id))
+    .filter(i => activeCategory === "הכל" || i.category.includes(activeCategory))
+    .filter(i => !activeToggles.has("רק עם תמונה") || i.hasImage)
+    .filter(i => !activeToggles.has("רק מקור ראשון") || i.status === "מקור ראשון")
+    .filter(i => !activeToggles.has("עד 6 שעות") || i.hoursSince <= 6)
+    .filter(i => !activeToggles.has("עד 12 שעות") || i.hoursSince <= 12)
+    .filter(i => !activeToggles.has("עד 24 שעות") || i.hoursSince <= 24);
+}
+
+function cardHtml(item) {
+  const imageBlock = item.hasImage ? `
+    <div class="border border-dashed border-slate-300 rounded-xl p-3 space-y-1.5">
+      <p class="text-xs font-medium text-slate-700">📷 תמונה מהמקור</p>
+      <a href="${item.url}" target="_blank" class="text-xs text-indigo-600 underline">פתח תמונה במקור</a>
+      <p class="text-xs badge-warn">⚠ תמונה מהמקור — יש לבדוק זכויות שימוש לפני פרסום</p>
+    </div>` : `
+    <div class="border border-dashed border-slate-300 rounded-xl p-3 space-y-2">
+      <p class="text-xs font-medium text-slate-700">✨ אין תמונה מהמקור — נדרשת תמונת AI</p>
+      <button class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-md" onclick="alert('בגרסה זו כפתור זה הוא הדגמה בלבד. לחיבור מחולל תמונות אמיתי (DALL-E / Stability וכו׳) יש להוסיף שרת Backend - ראו README.')">
+        Generate AI Image
+      </button>
+      <p class="text-[11px] text-slate-400 leading-relaxed">${item.aiPrompt}</p>
+    </div>`;
+
+  return `
+  <article class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+    <div class="p-5 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-bold leading-snug">${item.title}</h2>
+          <a href="${item.url}" target="_blank" class="text-sm text-indigo-600 underline">${item.source}</a>
+        </div>
+        <div class="flex flex-col items-end gap-1 shrink-0">
+          <span class="inline-flex items-center gap-1 badge-verified text-xs font-medium px-2 py-1 rounded-full">✓ מאומת בתוך 24 שעות</span>
+          <span class="text-xs text-slate-500">${formatTimeAgo(item.hoursSince)}</span>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        ${item.category.map(c => `<span class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">${c}</span>`).join("")}
+        <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full mr-auto">דירוג התאמה: ${item.matchScore}/100</span>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3 text-sm">
+        <div class="bg-slate-50 rounded-lg p-3">
+          <p class="font-medium text-slate-700 mb-1">למה זה מתאים</p>
+          <p class="text-slate-600">${item.whyItFits}</p>
+        </div>
+        <div class="bg-slate-50 rounded-lg p-3">
+          <p class="font-medium text-slate-700 mb-1">הזווית האמונית / האנושית</p>
+          <p class="text-slate-600">${item.angle}</p>
+        </div>
+      </div>
+
+      <div class="space-y-2 text-sm">
+        <div><p class="text-xs font-medium text-slate-500">הצעה לכותרת לפייסבוק</p><p>${item.fbTitle}</p></div>
+        <div><p class="text-xs font-medium text-slate-500">Hook לרילס</p><p>${item.reelHook}</p></div>
+        <div><p class="text-xs font-medium text-slate-500">פוסט מוכן לפייסבוק</p><p class="whitespace-pre-line">${item.fbPost}</p></div>
+        <div><p class="text-xs font-medium text-slate-500">טקסט ל-WhatsApp</p><p class="whitespace-pre-line">${item.waText}</p></div>
+        <div class="flex flex-wrap gap-1.5">${item.hashtags.map(h => `<span class="text-xs text-indigo-600">${h}</span>`).join(" ")}</div>
+      </div>
+
+      ${imageBlock}
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+        <span class="text-xs text-slate-400">סטטוס: ${item.status}</span>
+        <button class="text-sm bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium px-3 py-1.5 rounded-md" onclick="publishItem('${item.id}')">
+          ✓ פרסמתי
+        </button>
+      </div>
+    </div>
+  </article>`;
+}
+
+function publishItem(id) {
+  publishedIds.add(id);
+  renderCards();
+}
+
+function renderCards() {
+  const wrap = document.getElementById("cards");
+  const vis = visibleItems();
+  wrap.innerHTML = vis.map(cardHtml).join("");
+  document.getElementById("emptyState").classList.toggle("hidden", vis.length !== 0);
+  document.getElementById("statusLine").textContent =
+    `${vis.length} סיפורים בתוך 24 השעות האחרונות (מצב הדגמה)`;
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById("clock").textContent =
+    now.toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }) + " (שעון ישראל)";
+}
+
+document.getElementById("scanBtn").onclick = () => {
+  document.getElementById("statusLine").textContent = "סורק...";
+  setTimeout(() => {
+    items = makeMockItems();
+    document.getElementById("mockNotice").classList.remove("hidden");
+    renderCards();
+  }, 500);
+};
+
+// init
+renderFilters();
+items = makeMockItems();
+document.getElementById("mockNotice").classList.remove("hidden");
+renderCards();
+updateClock();
+setInterval(updateClock, 30000);
+</script>
+</body>
+</html>
