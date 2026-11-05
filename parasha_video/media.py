@@ -93,7 +93,7 @@ def probe_duration(path: Path) -> float:
 
 
 def estimate_seconds(text: str) -> float:
-    return max(1.5, len(text.split()) / 2.3)
+    return max(1.5, len(text.split()) / 2.1)
 
 
 _TTS_DOWN = False  # אחרי כישלון ראשון לא מנסים שוב בכל סצנה

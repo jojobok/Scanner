@@ -16,32 +16,36 @@ class Style:
     # --- וידאו ---
     width: int = 1080
     height: int = 1920            # אנכי 9:16 (רילס / שורטס / טיקטוק)
-    fps: int = 30
+    fps: int = 24
     max_seconds: float = 90.0     # תקרה קשיחה - דקה וחצי
-    target_seconds: float = 75.0  # היעד שגרוק מקבל לכתיבת התסריט
-    scenes_min: int = 6
-    scenes_max: int = 9
-    ken_burns_zoom: float = 1.12  # כמה "זום איטי" על כל תמונה
+    target_seconds: float = 72.0  # היעד שגרוק מקבל לכתיבת התסריט (הסרטון לדוגמה: 74 שנ')
+    scenes_min: int = 12
+    scenes_max: int = 16          # בסרטון לדוגמה ~15 תמונות, ~5 שניות כל אחת
+    ken_burns_zoom: float = 1.07  # זום איטי ועדין
+    transition: str = "fade"      # מעבר בין תמונות (xfade): fade / dissolve / fadeblack / none
+    transition_seconds: float = 1.0
+    final_hold_seconds: float = 2.5  # השהייה על התמונה האחרונה (כמו הנר בסוף הסרטון לדוגמה)
 
     # --- סגנון ויזואלי (מועבר לגרוק כדי שכל פרומפטי התמונות יהיו אחידים) ---
     visual_style: str = (
-        "cinematic, photorealistic, ancient Near East biblical era, warm golden-hour light, "
-        "soft volumetric haze, rich earthy colors, shallow depth of field, epic but intimate, "
-        "vertical 9:16 composition with the subject centered"
+        "hyper-realistic cinematic film still, ancient biblical-era Middle East desert, "
+        "dramatic sky with crepuscular god rays bursting through clouds, golden-hour backlight, "
+        "warm amber and deep teal color grade, floating dust and haze, high detail skin and fabric textures, "
+        "weathered robes, epic yet intimate, shallow depth of field, 35mm lens, vertical 9:16 portrait composition"
     )
     # רגישות דתית - נשלח לגרוק כהנחיה לכל פרומפט תמונה
     image_rules: str = (
-        "Never depict God in any form (use light, clouds, fire or rays instead). "
-        "Show biblical figures (patriarchs, matriarchs, Moses, Aaron, prophets) from behind, "
-        "in silhouette, or at a distance - no clear faces. No text, letters or watermarks in the image. "
-        "No idols shown in a glorifying way, no immodest clothing, no gore."
+        "Never depict God in any form (use light, rays, clouds or fire instead). "
+        "Keep every recurring character visually identical across all scenes (same face, age, beard, clothing colors). "
+        "No text, letters or watermarks in the image. Modest clothing, no gore, no idols glorified."
     )
     image_fit: str = "cover"      # cover = חיתוך למילוי המסך, blur = התמונה במרכז על רקע מטושטש
 
     # --- טון וכתיבה ---
     tone: str = (
-        "מרגש, חם ומעורר השראה, בגובה העיניים. פתיחה עם Hook חזק בשנייה הראשונה, "
-        "סיפור קצר מהפרשה, ואז מסר אישי ומעשי לחיים של היום. סיום עם משפט שנשאר בלב."
+        "סיפורי וקולנועי: מספרים את סיפור הפרשה כרצף תמונות, כמו טריילר. "
+        "פתיחה חזקה, סיפור שזורם לפי סדר האירועים, ובסוף מסר אחד שנוגע ללב ומתחבר לחיים שלנו היום. "
+        "משפטים קצרים, עברית יפה ופשוטה."
     )
     audience: str = "קהל ישראלי רחב, דתיים ומסורתיים, צופים ברשתות חברתיות"
     language: str = "he"
@@ -50,7 +54,9 @@ class Style:
     tts_voice: str = "he-IL-AvriNeural"   # קול גברי. קול נשי: he-IL-HilaNeural
     tts_rate: str = "+0%"
 
-    # --- כתוביות ---
+    # --- טקסט על המסך (בסרטון לדוגמה אין בכלל טקסט - לכן כבוי כברירת מחדל) ---
+    show_captions: bool = False           # כתוביות של הקריינות
+    show_titles: bool = False             # כותרת גדולה לכל סצנה
     font_name: str = "DejaVu Sans"
     font_size: int = 74
     title_font_size: int = 92

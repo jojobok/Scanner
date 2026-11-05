@@ -25,10 +25,12 @@ def _run(cmd: list[str]) -> None:
 
 
 def fit_timeline(scenes: list[Scene], style: Style) -> float:
-    """קובע אורך לכל סצנה ומוודא שהסה"כ לא עובר את התקרה (דקה וחצי)."""
-    gap = 0.35
+    """קובע אורך לכל סצנה ומוודא שהסה"כ לא עובר את התקרה (דקה וחצי).
+    s.seconds = הזמן מתחילת המעבר אל התמונה ועד תחילת המעבר לתמונה הבאה."""
+    gap = 0.45
     for i, s in enumerate(scenes):
-        s.seconds = s.audio_seconds + gap + (0.9 if i == len(scenes) - 1 else 0)
+        s.seconds = max(2.5, s.audio_seconds + gap)
+    scenes[-1].seconds += style.final_hold_seconds
     total = sum(s.seconds for s in scenes)
     if total > style.max_seconds:
         factor = (style.max_seconds - 0.2) / total
@@ -48,9 +50,10 @@ def _atempo_chain(tempo: float) -> str:
     return ",".join(parts)
 
 
-def render_scene_clip(s: Scene, idx: int, out: Path, style: Style) -> Path:
+def render_scene_clip(s: Scene, idx: int, out: Path, style: Style, extra: float = 0.0) -> Path:
+    """extra = זמן נוסף בסוף הקליפ שעליו יתבצע המעבר (crossfade) לתמונה הבאה."""
     W, H, fps = style.width, style.height, style.fps
-    frames = max(2, round(s.seconds * fps))
+    frames = max(2, round((s.seconds + extra) * fps))
     zmax = style.ken_burns_zoom
     zoom_in = f"1+({zmax}-1)*on/{frames}"
     zoom_out = f"{zmax}-({zmax}-1)*on/{frames}"
@@ -116,11 +119,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     t = 0.0
     total = sum(s.seconds for s in scenes)
     for i, s in enumerate(scenes):
-        heading = s.on_screen_text or (title if i == 0 else "")
+        heading = (s.on_screen_text or (title if i == 0 else "")) if style.show_titles else ""
         if heading:
             ev.append(f"Dialogue: 1,{_ts(t)},{_ts(t + s.seconds - 0.05)},Title,,0,0,0,,"
                       f"{{\\fad(250,200)\\blur1}}{_esc(heading)}")
-        parts = _chunks(s.narration, style.words_per_caption)
+        parts = _chunks(s.narration, style.words_per_caption) if style.show_captions else []
         speak = max(0.5, s.seconds - 0.35)
         weights = [max(1, len(p)) for p in parts]
         ct = t
@@ -138,36 +141,60 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 # ------------------------------------------------------------------ final assembly
 
+def _xfade_concat(clips: list[Path], scenes: list[Scene], style: Style, out: Path) -> Path:
+    X = style.transition_seconds
+    if style.transition == "none" or X <= 0 or len(clips) == 1:
+        lst = out.with_suffix(".txt")
+        lst.write_text("".join(f"file '{c.resolve()}'\n" for c in clips), encoding="utf-8")
+        _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out)])
+        return out
+    cmd = ["ffmpeg", "-y", "-v", "error"]
+    for c in clips:
+        cmd += ["-i", str(c)]
+    graph, prev, offset = [], "[0:v]", 0.0
+    for k in range(1, len(clips)):
+        offset += scenes[k - 1].seconds
+        tag = f"[v{k}]"
+        graph.append(f"{prev}[{k}:v]xfade=transition={style.transition}:duration={X:.3f}:offset={offset:.3f}{tag}")
+        prev = tag
+    cmd += ["-filter_complex", ";".join(graph), "-map", prev, "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "17", "-pix_fmt", "yuv420p", "-r", str(style.fps), str(out)]
+    _run(cmd)
+    return out
+
+
 def assemble(scenes: list[Scene], style: Style, title: str, work: Path, out: Path,
              fonts_dir: Path | None = None) -> Path:
     total = fit_timeline(scenes, style)
+    X = style.transition_seconds if style.transition != "none" else 0.0
     clips, auds = [], []
     for i, s in enumerate(scenes):
         print(f"   🎞  סצנה {i + 1}/{len(scenes)} ({s.seconds:.1f} שנ')")
-        clips.append(render_scene_clip(s, i, work / f"clip_{i:02d}.mp4", style))
+        extra = X if i < len(scenes) - 1 else 0.0
+        clips.append(render_scene_clip(s, i, work / f"clip_{i:02d}.mp4", style, extra))
         auds.append(render_scene_audio(s, work / f"aud_{i:02d}.wav"))
 
-    vlist, alist = work / "clips.txt", work / "auds.txt"
-    vlist.write_text("".join(f"file '{c.resolve()}'\n" for c in clips), encoding="utf-8")
+    _xfade_concat(clips, scenes, style, work / "video_raw.mp4")
+    alist = work / "auds.txt"
     alist.write_text("".join(f"file '{a.resolve()}'\n" for a in auds), encoding="utf-8")
-    _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(vlist), "-c", "copy",
-          str(work / "video_raw.mp4")])
     _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(alist),
           str(work / "voice.wav")])
 
-    ass = build_ass(scenes, style, title, work / "subs.ass")
-    ass_arg = str(ass).replace("\\", "/").replace(":", "\\:")
-    sub = f"ass='{ass_arg}'"
-    if fonts_dir and fonts_dir.is_dir():
-        sub += f":fontsdir='{str(fonts_dir).replace(chr(92), '/').replace(':', chr(92) + ':')}'"
-    fade_out = max(0.0, total - 0.8)
-    vfilter = f"[0:v]{sub},fade=t=in:st=0:d=0.4,fade=t=out:st={fade_out:.2f}:d=0.8[v]"
+    fade_out = max(0.0, total - 1.2)
+    vf = [f"fade=t=in:st=0:d=0.8", f"fade=t=out:st={fade_out:.2f}:d=1.2"]
+    if style.show_captions or style.show_titles or style.watermark:
+        ass = build_ass(scenes, style, title, work / "subs.ass")
+        sub = "ass='" + str(ass).replace("\\", "/").replace(":", "\\:") + "'"
+        if fonts_dir and fonts_dir.is_dir() and any(fonts_dir.iterdir()):
+            sub += ":fontsdir='" + str(fonts_dir).replace("\\", "/").replace(":", "\\:") + "'"
+        vf.insert(0, sub)
+    vfilter = "[0:v]" + ",".join(vf) + "[v]"
 
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(work / "video_raw.mp4"), "-i", str(work / "voice.wav")]
     if style.music_path and Path(style.music_path).exists():
         cmd += ["-stream_loop", "-1", "-i", style.music_path]
         afilter = (f"[2:a]volume={style.music_volume},afade=t=in:d=1.5,"
-                   f"afade=t=out:st={max(0, total - 2.5):.2f}:d=2.5[m];"
+                   f"afade=t=out:st={max(0, total - 3):.2f}:d=3[m];"
                    f"[1:a][m]amix=inputs=2:duration=first:normalize=0[a]")
     else:
         afilter = "[1:a]anull[a]"

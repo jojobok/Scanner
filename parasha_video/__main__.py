@@ -36,8 +36,11 @@ def write_prompts_md(plan: dict, path: Path) -> None:
         f"{theme.get('summary', '')}", "",
         f"**פסוק עוגן:** {theme.get('anchor_verse', '')}", "",
         f"**למה נבחר:** {plan.get('why_chosen', '')}", "",
-        "## סצנות", "",
     ]
+    if s.get("characters"):
+        lines += ["## דמויות (תיאור קבוע לכל התמונות)", ""]
+        lines += [f"- **{c.get('name', '')}**: {c.get('look', '')}" for c in s["characters"]] + [""]
+    lines += ["## סצנות", ""]
     for i, sc in enumerate(s["scenes"], 1):
         lines += [f"### סצנה {i} — {sc.get('on_screen_text', '')}", "",
                   f"קריינות: {sc['narration']}", "",
