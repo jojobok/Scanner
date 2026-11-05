@@ -1,0 +1,19 @@
+{
+  "_הערה": "מעתיקים לקובץ style.json, משנים מה שרוצים ומריצים עם --style style.json. כל שדה הוא אופציונלי.",
+  "visual_style": "cinematic, photorealistic, ancient Near East biblical era, warm golden-hour light, soft volumetric haze, rich earthy colors, vertical 9:16, subject centered",
+  "tone": "מרגש, חם ומעורר השראה, בגובה העיניים. Hook חזק בשנייה הראשונה, סיפור קצר מהפרשה, מסר מעשי לחיים.",
+  "target_seconds": 75,
+  "max_seconds": 90,
+  "scenes_min": 6,
+  "scenes_max": 9,
+  "tts_voice": "he-IL-AvriNeural",
+  "tts_rate": "+5%",
+  "font_name": "DejaVu Sans",
+  "font_size": 74,
+  "highlight_color": "&H0000D7FF",
+  "image_fit": "cover",
+  "music_path": "",
+  "music_volume": 0.12,
+  "outro_text": "שבת שלום",
+  "watermark": ""
+}
