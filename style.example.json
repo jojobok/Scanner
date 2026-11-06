@@ -1,0 +1,20 @@
+{
+  "_הערה": "מעתיקים לקובץ style.json, משנים מה שרוצים ומריצים עם --style style.json. כל שדה הוא אופציונלי. ברירת המחדל כבר מותאמת לסרטון הדוגמה (חיי שרה).",
+  "visual_style": "hyper-realistic cinematic film still, ancient biblical-era Middle East desert, dramatic sky with crepuscular god rays bursting through clouds, golden-hour backlight, warm amber and deep teal color grade, floating dust and haze, high detail skin and fabric textures, weathered robes, shallow depth of field, 35mm lens, vertical 9:16 portrait composition",
+  "target_seconds": 72,
+  "max_seconds": 90,
+  "scenes_min": 12,
+  "scenes_max": 16,
+  "transition": "fade",
+  "transition_seconds": 1.0,
+  "ken_burns_zoom": 1.07,
+  "final_hold_seconds": 2.5,
+  "show_captions": false,
+  "show_titles": false,
+  "tts_voice": "he-IL-AvriNeural",
+  "tts_rate": "-5%",
+  "music_path": "music/epic_ambient.mp3",
+  "music_volume": 0.18,
+  "outro_text": "שבת שלום",
+  "watermark": ""
+}
