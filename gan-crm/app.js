@@ -687,7 +687,8 @@ function viewSettings() {
     <div class="card"><div class="card-head"><h3>גיבוי ושחזור</h3></div>
       <p class="small muted">הנתונים נשמרים בדפדפן הזה בלבד. מומלץ להוריד גיבוי באופן קבוע ולשמור אותו במקום בטוח (מחשב, דרייב, מייל).</p>
       <div class="actions"><button class="btn primary" data-act="backup">⬇ הורדת גיבוי</button>
-        <label class="btn">⬆ שחזור מגיבוי<input type="file" accept=".json,application/json" id="restoreFile" hidden></label></div>
+        <label class="btn">⬆ שחזור מקובץ<input type="file" accept=".json,application/json" id="restoreFile" hidden></label>
+        <button class="btn" data-act="restoreText">שחזור מטקסט</button></div>
       <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
       <p class="small muted">איפוס: התחלה מחדש עם 4 הכיתות בלבד (ללא ילדים וצוות), או טעינת נתוני ההדגמה.</p>
       <div class="actions"><button class="btn danger" data-act="wipe">מחיקת כל הנתונים</button><button class="btn" data-act="loadDemo">טעינת נתוני הדגמה</button></div>
@@ -770,8 +771,7 @@ function openReportModal(r) {
   data => {
     if (!requireFields(data, ['date', 'classId', 'summary'])) return false;
     const dup = db.reports.find(x => x.date === data.date && x.classId === data.classId && (!r || x.id !== r.id));
-    if (dup && !confirm('כבר קיים דוח לכיתה זו בתאריך זה. להחליף אותו?')) return false;
-    if (dup) db.reports = db.reports.filter(x => x.id !== dup.id);
+    if (dup) { toast('כבר קיים דוח לכיתה זו בתאריך זה. אפשר לערוך אותו מרשימת הדוחות.', true); return false; }
     const rec = { date: data.date, classId: data.classId, childrenCount: Number(data.childrenCount) || 0, summary: data.summary.trim(), meals: data.meals.trim(), highlights: data.highlights.trim() };
     if (r) Object.assign(r, rec, { updatedAt: Date.now() });
     else db.reports.push({ id: uid(), staffId: u.id, createdAt: Date.now(), ...rec });
@@ -862,7 +862,7 @@ const ACTIONS = {
   delClass: d => {
     const c = db.classes.find(x => x.id === d.id);
     if (classKids(d.id).length) return toast('לא ניתן למחוק כיתה שיש בה ילדים. יש להעביר אותם קודם.', true);
-    if (!confirm(`למחוק את ${c.name}?`)) return;
+    if (!d._ok) return askConfirm(`למחוק את ${c.name}?`, () => ACTIONS.delClass({ ...d, _ok: '1' }));
     db.classes = db.classes.filter(x => x.id !== d.id); delete db.schedules[d.id];
     logAction('מחיקת כיתה: ' + c.name); closeModal(); commit('הכיתה נמחקה');
   },
@@ -879,7 +879,7 @@ const ACTIONS = {
   },
   delChild: d => {
     const k = db.children.find(x => x.id === d.id);
-    if (!confirm(`למחוק את ${k.firstName} ${k.lastName}? היסטוריית הנוכחות תימחק מהדוחות.`)) return;
+    if (!d._ok) return askConfirm(`למחוק את ${k.firstName} ${k.lastName}? היסטוריית הנוכחות תימחק מהדוחות.`, () => ACTIONS.delChild({ ...d, _ok: '1' }));
     db.children = db.children.filter(x => x.id !== d.id);
     logAction(`מחיקת ילד/ה: ${k.firstName} ${k.lastName}`); commit('נמחק');
   },
@@ -915,7 +915,7 @@ const ACTIONS = {
   },
   delShift: d => {
     const s = db.shifts.find(x => x.id === d.id);
-    if (!confirm('למחוק את המשמרת?')) return;
+    if (!d._ok) return askConfirm('למחוק את המשמרת?', () => ACTIONS.delShift({ ...d, _ok: '1' }));
     db.shifts = db.shifts.filter(x => x.id !== d.id);
     logAction(`מחיקת משמרת של ${staffName(s.staffId)} ${fmtDate(s.date)}`); commit('נמחק');
   },
@@ -932,7 +932,7 @@ const ACTIONS = {
   editReport: d => openReportModal(db.reports.find(r => r.id === d.id)),
   delReport: d => {
     const r = db.reports.find(x => x.id === d.id);
-    if (!confirm('למחוק את הדוח?')) return;
+    if (!d._ok) return askConfirm('למחוק את הדוח?', () => ACTIONS.delReport({ ...d, _ok: '1' }));
     db.reports = db.reports.filter(x => x.id !== d.id);
     logAction(`מחיקת דוח יומי – ${className(r.classId)} ${fmtDate(r.date)}`); commit('נמחק');
   },
@@ -955,7 +955,7 @@ const ACTIONS = {
   },
   delComplaint: d => {
     const c = db.complaints.find(x => x.id === d.id);
-    if (!confirm('למחוק את התלונה?')) return;
+    if (!d._ok) return askConfirm('למחוק את התלונה?', () => ACTIONS.delComplaint({ ...d, _ok: '1' }));
     db.complaints = db.complaints.filter(x => x.id !== d.id);
     logAction(`מחיקת תלונה: ${c.subject}`); commit('נמחק');
   },
@@ -998,7 +998,7 @@ const ACTIONS = {
   },
   readMsg: d => { const m = db.messages.find(x => x.id === d.id); if (m && !m.readBy.includes(me.id)) { m.readBy.push(me.id); logAction(`קריאת הודעה: ${m.subject}`); } commit(); },
   readAll: () => { myMessages().forEach(m => { if (!m.readBy.includes(me.id)) m.readBy.push(me.id); }); logAction('סימון כל ההודעות כנקראו'); commit(); },
-  delMessage: d => { if (!confirm('למחוק את ההודעה?')) return; const m = db.messages.find(x => x.id === d.id); db.messages = db.messages.filter(x => x.id !== d.id); logAction('מחיקת הודעה: ' + m.subject); commit(); },
+  delMessage: d => { if (!d._ok) return askConfirm('למחוק את ההודעה?', () => ACTIONS.delMessage({ ...d, _ok: '1' })); const m = db.messages.find(x => x.id === d.id); db.messages = db.messages.filter(x => x.id !== d.id); logAction('מחיקת הודעה: ' + m.subject); commit(); },
 
   newReminder: () => {
     openModal('תזכורת / בקשה למנהלת', `${fld('מה צריך?', area('text', '', 'rows="3" required placeholder="לדוגמה: נגמרו מגבונים, צריך להזמין"'))}
@@ -1018,7 +1018,7 @@ const ACTIONS = {
       <label class="fld check"><input type="checkbox" name="done" ${r.status === 'done' ? 'checked' : ''}> סימון כבוצע</label>`,
     data => { r.managerNote = data.note.trim(); r.status = data.done === 'on' ? 'done' : 'open'; logAction('תשובה לתזכורת: ' + r.text); });
   },
-  delReminder: d => { if (!confirm('למחוק את התזכורת?')) return; db.reminders = db.reminders.filter(x => x.id !== d.id); commit(); },
+  delReminder: d => { if (!d._ok) return askConfirm('למחוק את התזכורת?', () => ACTIONS.delReminder({ ...d, _ok: '1' })); db.reminders = db.reminders.filter(x => x.id !== d.id); commit(); },
 
   payDetail: d => { F.attTab = 'staff'; F.shiftStaff = d.sid; F.shiftMonth = d.m; state.view = 'attendance'; state.p = {}; render(); window.scrollTo(0, 0); },
   exportPayroll: d => {
@@ -1029,23 +1029,53 @@ const ACTIONS = {
       .concat([['סה״כ', '', '', '', (tot.mins / 60).toFixed(2), '', tot.gross.toFixed(2)]]));
   },
 
+  restoreText: () => {
+    openModal('שחזור מטקסט גיבוי', `${fld('מדביקים כאן את טקסט הגיבוי', area('json', '', 'rows="8" dir="ltr" required'))}<p class="small muted" style="margin:0">כל הנתונים הנוכחיים יוחלפו.</p>`, data => {
+      try {
+        const parsed = JSON.parse(data.json);
+        if (!parsed || !Array.isArray(parsed.classes) || !Array.isArray(parsed.staff)) throw new Error('הטקסט אינו גיבוי תקין');
+        db = migrate(parsed); logAction('שחזור מגיבוי'); toast('השחזור הושלם');
+      } catch (err) { toast('שחזור נכשל: ' + err.message, true); return false; }
+    }, 'שחזור');
+  },
   backup: () => { downloadFile(`גיבוי-גן-${todayStr()}.json`, JSON.stringify(db, null, 1), 'application/json'); logAction('הורדת גיבוי'); save(); },
-  wipe: () => {
-    if (!confirm('למחוק את כל הנתונים? מומלץ להוריד גיבוי קודם. הפעולה אינה הפיכה.')) return;
+  wipe: (d = {}) => {
+    if (!d._ok) return askConfirm('למחוק את כל הנתונים? מומלץ להוריד גיבוי קודם. הפעולה אינה הפיכה.', () => ACTIONS.wipe({ ...d, _ok: '1' }));
     const keep = db.settings;
     db = emptyDb(); db.settings = { ...keep, demo: false };
     db.classes = baseClasses();
     db.classes.forEach(c => { db.schedules[c.id] = (c.id === 'c1' ? BABY_SCHED : DEFAULT_SCHED).map(([time, activity]) => ({ time, activity })); });
     logAction('מחיקת כל הנתונים'); commit('הנתונים נמחקו. אפשר להתחיל להוסיף צוות וילדים.');
   },
-  loadDemo: () => {
-    if (!confirm('לטעון נתוני הדגמה? כל הנתונים הנוכחיים יוחלפו.')) return;
+  loadDemo: (d = {}) => {
+    if (!d._ok) return askConfirm('לטעון נתוני הדגמה? כל הנתונים הנוכחיים יוחלפו.', () => ACTIONS.loadDemo({ ...d, _ok: '1' }));
     db = seed(); me = { id: 'manager' }; sessSave(); commit('נתוני ההדגמה נטענו');
   }
 };
 
-/* ---------------------------- קבצים ---------------------------- */
+/* ---------------------------- אישור וקבצים ---------------------------- */
+function askConfirm(msg, onYes) {
+  openModal('אישור פעולה', `<p style="margin:0">${esc(msg)}</p>`, () => { onYes(); }, 'אישור');
+}
+// כשהמערכת רצה בתוך מסגרת (למשל קישור מ-claude.ai) הורדת קבצים חסומה, ולכן מציגים את התוכן להעתקה
+const EMBEDDED = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+if (EMBEDDED) document.documentElement.classList.add('embedded');
+function showCopyBox(title, text, hint) {
+  openModal(title, `<p class="small muted" style="margin:0">${esc(hint)}</p>
+    ${fld('', `<textarea id="copyBox" rows="10" readonly dir="ltr" style="font-family:monospace;font-size:12px">${esc(text)}</textarea>`)}
+    <button type="button" class="btn primary" data-act="copyBox" style="align-self:flex-start">העתקה</button>`, null);
+}
+ACTIONS.copyBox = () => {
+  const t = document.getElementById('copyBox');
+  const fallback = () => { t.focus(); t.select(); toast('הטקסט מסומן. אפשר להעתיק אותו ידנית.'); };
+  try { navigator.clipboard.writeText(t.value).then(() => toast('הועתק'), fallback); } catch (e) { fallback(); }
+};
 function downloadFile(name, content, type) {
+  if (EMBEDDED) {
+    const isJson = type.includes('json');
+    return showCopyBox(isJson ? 'גיבוי הנתונים' : 'ייצוא לאקסל', content,
+      isJson ? 'מעתיקים את הטקסט ושומרים אותו בפתקים או במייל. לשחזור: מסך הגדרות ← שחזור מטקסט.' : 'מעתיקים ומדביקים בגיליון אקסל או Google Sheets.');
+  }
   const blob = new Blob([content], { type });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
@@ -1053,6 +1083,7 @@ function downloadFile(name, content, type) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 function downloadCsv(name, rows) {
+  if (EMBEDDED) return downloadFile(name, rows.map(r => r.map(v => String(v ?? '').replace(/[\t\n\r]+/g, ' ')).join('\t')).join('\n'), 'text/tab-separated-values');
   const csv = '﻿' + rows.map(r => r.map(v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\r\n');
   downloadFile(name, csv, 'text/csv;charset=utf-8');
 }
@@ -1079,8 +1110,7 @@ document.addEventListener('change', e => {
       try {
         const data = JSON.parse(reader.result);
         if (!data || !Array.isArray(data.classes) || !Array.isArray(data.staff)) throw new Error('קובץ לא תקין');
-        if (!confirm('לשחזר מהגיבוי? כל הנתונים הנוכחיים יוחלפו.')) return;
-        db = migrate(data); logAction('שחזור מגיבוי'); commit('השחזור הושלם');
+        askConfirm('לשחזר מהגיבוי? כל הנתונים הנוכחיים יוחלפו.', () => { db = migrate(data); logAction('שחזור מגיבוי'); commit('השחזור הושלם'); });
       } catch (err) { toast('שחזור נכשל: ' + err.message, true); }
     };
     reader.readAsText(el.files[0]);
