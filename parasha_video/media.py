@@ -108,10 +108,21 @@ def synthesize(text: str, dst: Path, style: Style) -> tuple[Path, bool]:
         return dst, True  # כבר הוקלט בהרצה קודמת
     if not _TTS_DOWN:
         try:
+            import os
+            import ssl
+
             import edge_tts
+            import edge_tts.communicate as _c
+
+            # edge-tts (aiohttp) לא קורא HTTPS_PROXY / SSL_CERT_FILE לבד - מעבירים ידנית
+            proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+            cafile = os.environ.get("SSL_CERT_FILE")
+            if cafile and hasattr(_c, "_SSL_CTX"):
+                _c._SSL_CTX = ssl.create_default_context(cafile=cafile)
 
             async def run():
-                await edge_tts.Communicate(text, style.tts_voice, rate=style.tts_rate).save(str(dst))
+                await edge_tts.Communicate(text, style.tts_voice, rate=style.tts_rate,
+                                           proxy=proxy).save(str(dst))
 
             asyncio.run(run())
             if dst.exists() and dst.stat().st_size > 1000:
