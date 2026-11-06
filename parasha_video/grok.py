@@ -51,16 +51,44 @@ class GrokClient:
         raise GrokError("xAI: יותר מדי ניסיונות כושלים")
 
     def chat_json(self, user: str, temperature: float = 0.8) -> dict:
-        data = self._post("chat/completions", {
+        """שולח בסטרימינג: מודלי reasoning חושבים הרבה זמן לפני התשובה,
+        ובלי סטרימינג חיבורים (proxy / רשת סלולרית) נוטים להיחתך."""
+        url = f"{self.api.xai_base_url.rstrip('/')}/chat/completions"
+        payload = {
             "model": self.api.text_model,
             "temperature": temperature,
+            "stream": True,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": prompts.SYSTEM},
                 {"role": "user", "content": user},
             ],
-        })
-        return _parse_json(data["choices"][0]["message"]["content"])
+        }
+        last_err = ""
+        for attempt in range(4):
+            try:
+                with self.s.post(url, json=payload, stream=True, timeout=(15, 120)) as r:
+                    if r.status_code >= 400:
+                        last_err = f"xAI {r.status_code}: {r.text[:300]}"
+                        if r.status_code in (429, 500, 502, 503, 504):
+                            time.sleep(2 ** (attempt + 1))
+                            continue
+                        raise GrokError(last_err)
+                    parts = []
+                    for line in r.iter_lines(decode_unicode=False):
+                        if not line or not line.startswith(b"data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == b"[DONE]":
+                            break
+                        delta = json.loads(data)["choices"][0].get("delta", {})
+                        if delta.get("content"):
+                            parts.append(delta["content"])
+                    return _parse_json("".join(parts))
+            except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as e:
+                last_err = f"{type(e).__name__}: {e}"
+                time.sleep(2 ** (attempt + 1))
+        raise GrokError(f"xAI: יותר מדי ניסיונות כושלים ({last_err})")
 
     def find_theme(self, p: Parasha, style: Style) -> dict:
         return self.chat_json(prompts.theme_prompt(p, style))
