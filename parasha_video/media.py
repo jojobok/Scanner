@@ -99,13 +99,31 @@ def estimate_seconds(text: str) -> float:
 _TTS_DOWN = False  # אחרי כישלון ראשון לא מנסים שוב בכל סצנה
 
 
+def sidecar(path: Path) -> Path:
+    """קובץ טקסט ליד קובץ מדיה, ששומר ממה הוא נוצר (טקסט/פרומפט).
+    כך יודעים אם אפשר להשתמש בו שוב או שהתסריט השתנה וצריך ליצור מחדש."""
+    return path.with_name(path.stem + ".source.txt")
+
+
+def read_sidecar(path: Path) -> str | None:
+    s = sidecar(path)
+    return s.read_text(encoding="utf-8") if s.exists() else None
+
+
+def write_sidecar(path: Path, key: str) -> None:
+    sidecar(path).write_text(key, encoding="utf-8")
+
+
 def synthesize(text: str, dst: Path, style: Style) -> tuple[Path, bool]:
     """קריינות עם edge-tts (חינמי, קולות עברית של מיקרוסופט).
     אם אין רשת / אין חבילה - מחזיר שקט באורך משוער, כדי שהצנרת לא תיתקע.
     מחזיר (נתיב, האם_זו_קריינות_אמיתית)."""
     global _TTS_DOWN
-    if dst.exists() and dst.stat().st_size > 1000:
-        return dst, True  # כבר הוקלט בהרצה קודמת
+    key = f"{style.tts_voice}|{style.tts_rate}|{text}"
+    if dst.exists() and dst.stat().st_size > 1000 and read_sidecar(dst) == key:
+        return dst, True  # הוקלט בהרצה קודמת מאותו טקסט בדיוק
+    dst.unlink(missing_ok=True)
+    sidecar(dst).unlink(missing_ok=True)
     if not _TTS_DOWN:
         try:
             import os
@@ -126,6 +144,7 @@ def synthesize(text: str, dst: Path, style: Style) -> tuple[Path, bool]:
 
             asyncio.run(run())
             if dst.exists() and dst.stat().st_size > 1000:
+                write_sidecar(dst, key)
                 return dst, True
         except Exception as e:  # noqa: BLE001
             print(f"   ⚠ קריינות נכשלה ({type(e).__name__}: {str(e)[:120]}) - משתמש בשקט זמני")
