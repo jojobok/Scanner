@@ -52,6 +52,57 @@ def write_prompts_md(plan: dict, path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def generate_script(plan: dict, parasha: Parasha, style, client, demo: bool,
+                    plan_path: Path) -> bool:
+    """שלב 2: גרוק כותב תסריט לנושא שב-plan. שומר plan.json + prompts.md. מחזיר False אם נכשל."""
+    print("✍  גרוק כותב תסריט...")
+    theme = plan.get("theme") or {}
+    script = grok.mock_script(parasha, style) if demo else client.write_script(parasha, theme, style)
+    scenes = script.get("scenes") or []
+    if not scenes:
+        print("❌ גרוק החזיר תסריט בלי סצנות", file=sys.stderr)
+        return False
+    script["scenes"] = scenes[: style.scenes_max + 2]
+    plan["script"] = script
+    plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_prompts_md(plan, plan_path.parent / "prompts.md")
+    print(f"   «{script.get('title')}» — {len(script['scenes'])} סצנות")
+    print(f"   נשמר: {plan_path} + prompts.md")
+    return True
+
+
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def scene_image(img_dir: Path, i: int, prompt: str, demo: bool, regen: bool, client, style) -> Path:
+    """מחזיר תמונה לסצנה i, ומייצר חדשה רק כשצריך:
+    - תמונה שהמשתמש שם ידנית (אין לה קובץ מקור, או שהיא חדשה ממנו) - נשמרת תמיד.
+    - תמונה שנוצרה מפרומפט אחר (התסריט נערך / תסריט חדש / תמונת דמה בהרצה אמיתית) - נוצרת מחדש."""
+    name = f"scene_{i + 1:02d}"
+    files = sorted((p for p in img_dir.glob(f"{name}.*") if p.suffix.lower() in IMAGE_EXTS),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    real_key, demo_key = f"grok|{prompt}", f"demo|{prompt}"
+    src = img_dir / f"{name}.source.txt"
+    if files and not regen:
+        newest = files[0]
+        if not src.exists() or newest.stat().st_mtime > src.stat().st_mtime + 1:
+            return newest  # הוחלפה ידנית - לא נוגעים
+        key = src.read_text(encoding="utf-8")
+        if key == real_key or (demo and key == demo_key):
+            return newest  # נוצרה מאותו פרומפט בדיוק
+    for p in files:
+        p.unlink()
+    dst = img_dir / f"{name}.png"
+    if demo:
+        media.placeholder_image(dst, i, prompt[:140], style)
+        media.write_sidecar(dst, demo_key)
+    else:
+        print(f"   🖼  תמונה {i + 1}")
+        client.image(prompt, dst)
+        media.write_sidecar(dst, real_key)
+    return dst
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="parasha_video", description="מחולל סרטוני פרשת השבוע")
     ap.add_argument("--parasha", help='שם הפרשה בעברית, למשל "וירא" (ברירת מחדל: הפרשה של השבת הקרובה)')
@@ -82,6 +133,13 @@ def main(argv: list[str] | None = None) -> int:
         pd = plan["parasha"]
         parasha = Parasha(pd["name_he"], pd["name_en"], dt.date.fromisoformat(pd["shabbat_date"]), pd["source"])
         print(f"📖 ממשיך מתסריט קיים: {parasha.title_he}")
+        if not (plan.get("script") or {}).get("scenes"):
+            # למשל אחרי --stop-after theme: יש נושא אבל עוד אין תסריט
+            if not generate_script(plan, parasha, style, client, demo, plan_path):
+                return 1
+            if args.stop_after == "script":
+                print("✅ אפשר לערוך את plan.json ולהמשיך עם --from-plan")
+                return 0
     else:
         today = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
         if args.parasha:
@@ -116,18 +174,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"✅ נשמר: {plan_path}")
             return 0
 
-        print("✍  גרוק כותב תסריט...")
-        script = grok.mock_script(parasha, style) if demo else client.write_script(parasha, theme, style)
-        scenes = script.get("scenes") or []
-        if not scenes:
-            print("❌ גרוק החזיר תסריט בלי סצנות", file=sys.stderr)
+        if not generate_script(plan, parasha, style, client, demo, plan_path):
             return 1
-        script["scenes"] = scenes[: style.scenes_max + 2]
-        plan["script"] = script
-        plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-        write_prompts_md(plan, work / "prompts.md")
-        print(f"   «{script.get('title')}» — {len(script['scenes'])} סצנות")
-        print(f"   נשמר: {plan_path} + prompts.md")
         if args.stop_after == "script":
             print("✅ אפשר לערוך את plan.json ולהמשיך עם --from-plan")
             return 0
@@ -142,17 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     print("🎨 יוצר תמונות...")
     raw_images = []
     for i, sc in enumerate(script["scenes"]):
-        existing = sorted(img_dir.glob(f"scene_{i + 1:02d}.*"))
-        if existing and not args.regen_images:
-            raw_images.append(existing[0])  # מאפשר גם להחליף תמונה ידנית
-            continue
-        dst = img_dir / f"scene_{i + 1:02d}.png"
-        if demo:
-            media.placeholder_image(dst, i, sc["image_prompt"][:140], style)
-        else:
-            print(f"   🖼  {i + 1}/{len(script['scenes'])}")
-            client.image(sc["image_prompt"], dst)
-        raw_images.append(dst)
+        raw_images.append(scene_image(img_dir, i, sc["image_prompt"], demo, args.regen_images, client, style))
     if args.stop_after == "images":
         print(f"✅ התמונות ב-{img_dir}. אפשר להחליף ידנית (scene_XX.png/jpg) ולהמשיך עם --from-plan")
         return 0
