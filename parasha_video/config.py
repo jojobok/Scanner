@@ -14,8 +14,8 @@ from pathlib import Path
 @dataclass
 class Style:
     # --- וידאו ---
-    width: int = 1080
-    height: int = 1920            # אנכי 9:16 (רילס / שורטס / טיקטוק)
+    width: int = 720
+    height: int = 1280            # אנכי 9:16, כמו הסרטון לדוגמה (גרוק מחזיר תמונות 720x1280)
     fps: int = 24
     max_seconds: float = 90.0     # תקרה קשיחה - דקה וחצי
     target_seconds: float = 72.0  # היעד שגרוק מקבל לכתיבת התסריט (הסרטון לדוגמה: 74 שנ')
@@ -93,8 +93,8 @@ def load_style(path: str | None) -> Style:
 class ApiConfig:
     xai_api_key: str = field(default_factory=lambda: os.environ.get("XAI_API_KEY", ""))
     xai_base_url: str = field(default_factory=lambda: os.environ.get("XAI_BASE_URL", "https://api.x.ai/v1"))
-    text_model: str = field(default_factory=lambda: os.environ.get("GROK_MODEL", "grok-4"))
-    image_model: str = field(default_factory=lambda: os.environ.get("GROK_IMAGE_MODEL", "grok-2-image"))
+    text_model: str = field(default_factory=lambda: os.environ.get("GROK_MODEL", "grok-4.7"))
+    image_model: str = field(default_factory=lambda: os.environ.get("GROK_IMAGE_MODEL", "grok-imagine-image-2.0"))
 
 
 def load_dotenv(path: str = ".env") -> None:

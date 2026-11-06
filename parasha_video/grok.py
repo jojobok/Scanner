@@ -74,6 +74,7 @@ class GrokClient:
             "prompt": prompt,
             "n": 1,
             "response_format": "b64_json",
+            "aspect_ratio": "9:16",
         })
         item = data["data"][0]
         if item.get("b64_json"):
