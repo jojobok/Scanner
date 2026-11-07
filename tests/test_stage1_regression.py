@@ -48,7 +48,7 @@ class TimelineHelpersTests(unittest.TestCase):
                          ["one two", "three four", "five"])
 
     def test_ass_escaping(self):
-        self.assertEqual(_esc("a{b}\\c\nd"), "a(b)cd")
+        self.assertEqual(_esc("a{b}\\c\nd"), "a(b)c d")
 
     def test_timestamp(self):
         self.assertEqual(_ts(65.25), "0:01:05.25")
