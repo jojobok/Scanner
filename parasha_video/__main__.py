@@ -75,9 +75,13 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def scene_image(img_dir: Path, i: int, prompt: str, demo: bool, regen: bool, client, style) -> Path:
-    """מחזיר תמונה לסצנה i, ומייצר חדשה רק כשצריך:
-    - תמונה שהמשתמש שם ידנית (אין לה קובץ מקור, או שהיא חדשה ממנו) - נשמרת תמיד.
-    - תמונה שנוצרה מפרומפט אחר (התסריט נערך / תסריט חדש / תמונת דמה בהרצה אמיתית) - נוצרת מחדש."""
+    """Return a scene image, retaining prior versions when regenerating.
+
+    Render into a staging file first. Existing media remains untouched if
+    generation fails. Archive the old image(s) and provenance before replacing.
+    """
+    from .image_versions import replace_scene_image
+
     name = f"scene_{i + 1:02d}"
     files = sorted((p for p in img_dir.glob(f"{name}.*") if p.suffix.lower() in IMAGE_EXTS),
                    key=lambda p: p.stat().st_mtime, reverse=True)
@@ -86,21 +90,20 @@ def scene_image(img_dir: Path, i: int, prompt: str, demo: bool, regen: bool, cli
     if files and not regen:
         newest = files[0]
         if not src.exists() or newest.stat().st_mtime > src.stat().st_mtime + 1:
-            return newest  # הוחלפה ידנית - לא נוגעים
+            return newest  # manually replaced; never overwrite automatically
         key = src.read_text(encoding="utf-8")
         if key == real_key or (demo and key == demo_key):
-            return newest  # נוצרה מאותו פרומפט בדיוק
-    for p in files:
-        p.unlink()
-    dst = img_dir / f"{name}.png"
-    if demo:
-        media.placeholder_image(dst, i, prompt[:140], style)
-        media.write_sidecar(dst, demo_key)
-    else:
-        print(f"   🖼  תמונה {i + 1}")
-        client.image(prompt, dst)
-        media.write_sidecar(dst, real_key)
-    return dst
+            return newest
+
+    def generate(dst: Path) -> None:
+        if demo:
+            media.placeholder_image(dst, i, prompt[:140], style)
+        else:
+            print(f"   🖼  תמונה {i + 1}")
+            client.image(prompt, dst)
+
+    return replace_scene_image(img_dir, name, files, src,
+                               demo_key if demo else real_key, generate)
 
 
 def main(argv: list[str] | None = None) -> int:
