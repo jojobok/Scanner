@@ -47,7 +47,7 @@ $("export").addEventListener("click",()=>{
 });
 render();
 
-$("demo").addEventListener("click", async () => {
+$("demo").addEventListener("click", () => {
   const button = $("demo");
   const portion = $("portion").value.trim();
   if (!portion) { alert("יש להזין שם פרשה"); return; }
@@ -55,12 +55,18 @@ $("demo").addEventListener("click", async () => {
   button.disabled = true;
   button.textContent = "טוען תסריט...";
   try {
-    const response = await fetch("/api/demo-script", {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({portion})
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "שגיאה בשרת");
+    const result = {
+      parasha: portion,
+      title: "פרשת " + portion + " (תסריט הדגמה)",
+      scenes: [
+        ["פתיחה: מה אפשר ללמוד מפרשת " + portion + "? (טקסט הדגמה בלבד)", "Cinematic biblical desert landscape at sunrise, vertical 9:16"],
+        ["המסע מתחיל ברגע של התבוננות.", "Ancient tents in a desert valley, natural warm light, vertical 9:16"],
+        ["לפעמים הדרך ארוכה, ולא רואים את סופה.", "Winding path through rocky hills, realistic biblical setting, vertical 9:16"],
+        ["אבל כל צעד קטן יכול לפתוח דרך חדשה.", "Sandaled feet walking along an ancient stone path, vertical 9:16"],
+        ["חשוב לזכור את הכוח של מעשה טוב.", "Warm sunbeams across ancient Judean hills, vertical 9:16"],
+        ["שבת שלום. זהו תסריט הדגמה בלבד, לא תוכן תורני מאומת.", "Quiet ancient landscape at golden hour, vertical 9:16"]
+      ].map(([narration,image_prompt]) => ({narration,image_prompt,approved:false}))
+    };
     if (project.scenes.length) localStorage.setItem("scanner-studio-backup-" + Date.now(), JSON.stringify(project));
     project.portion = result.parasha;
     project.title = result.title;
@@ -68,7 +74,7 @@ $("demo").addEventListener("click", async () => {
     $("title").value = project.title;
     save(); render();
   } catch (error) {
-    alert("לא ניתן לטעון תסריט: " + error.message + ".");
+    alert("לא ניתן ליצור תסריט הדגמה: " + error.message);
   } finally {
     button.disabled = false;
     button.textContent = "צור תסריט הדגמה";
