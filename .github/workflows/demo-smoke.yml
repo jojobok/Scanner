@@ -1,0 +1,61 @@
+name: Demo production smoke test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg and Python dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m pip install -r requirements.txt
+      - name: Prepare small offline demo settings
+        run: |
+          python - <<'PY'
+          import json
+          with open("demo-ci-style.json", "w", encoding="utf-8") as f:
+              json.dump({"width": 180, "height": 320, "fps": 8,
+                         "max_seconds": 90, "target_seconds": 72,
+                         "transition": "none", "show_captions": False,
+                         "show_titles": False}, f)
+          PY
+      - name: Render a complete demo video
+        env:
+          XAI_API_KEY: ''
+        run: |
+          python -m parasha_video --demo --parasha "וירא" --date 2026-11-02 --style demo-ci-style.json --out demo-output
+      - name: Validate produced MP4
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json, subprocess
+          files = [p for p in Path("demo-output").rglob("*.mp4") if "build" not in p.parts]
+          assert len(files) == 1, f"Expected one MP4, got {files}"
+          info = json.loads(subprocess.check_output(
+              ["ffprobe", "-v", "error", "-show_streams", "-show_format",
+               "-of", "json", str(files[0])], text=True))
+          assert files[0].stat().st_size > 1000
+          assert any(s["codec_type"] == "video" for s in info["streams"])
+          assert any(s["codec_type"] == "audio" for s in info["streams"])
+          assert 0 < float(info["format"]["duration"]) <= 90.5
+          print("Demo MP4 validated:", files[0], info["format"]["duration"])
+          PY
+      - name: Upload debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-debug
+          path: demo-output/
+          retention-days: 1
