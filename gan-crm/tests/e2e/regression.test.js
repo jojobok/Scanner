@@ -199,20 +199,16 @@ describe('manager', () => {
     await done(s);
   });
 
-  it('daily reports: missing notice, duplicate blocked, new report, delete', async () => {
+  it('daily reports: missing notice, new report, duplicate blocked, delete', async () => {
     const s = await asManager();
     await H.nav(s.app, 'reports');
     const notice = await s.app.locator('.notice').textContent();
     assert.ok(notice.includes('גיל שנתיים') && notice.includes('גיל שנתיים וחצי'));
     const before = (await H.readDb(s.page)).reports.length;
-    // class 1 already has today's report: "+ daily report" opens it for editing
-    await s.app.locator('[data-act=newReport]').click();
-    assert.equal(await s.app.locator('#modal h3').textContent(), 'עריכת דוח יומי');
-    await s.app.locator('#modalForm [data-act=closeModal]').click();
-    // class 3 has none: a new report
-    await s.app.locator('select[data-filter=repClass]').selectOption('c3');
+    // no class filter: "+ daily report" starts a new report for the first class without one today (c3)
     await s.app.locator('[data-act=newReport]').click();
     assert.equal(await s.app.locator('#modal h3').textContent(), 'דוח יומי חדש');
+    assert.equal(await s.app.locator('#modalForm select[name=classId]').inputValue(), 'c3');
     await s.app.locator('#modalForm select[name=classId]').selectOption('c2'); // c2 has one today -> blocked
     await s.app.locator('#modalForm textarea[name=summary]').fill('דוח בדיקה');
     await H.submitModal(s.app);
@@ -228,22 +224,6 @@ describe('manager', () => {
     await H.submitModal(s.app);
     assert.equal((await H.readDb(s.page)).reports.length, before);
     await done(s);
-  });
-
-  // KNOWN BUG (found by this suite, fix waits for approval):
-  // "+ daily report" opens class 1's existing report; changing the class in that
-  // form and saving MOVES class 1's report to the other class instead of
-  // creating a new one, so class 1 loses its report.
-  it('daily reports: changing the class in an opened report must not move it', { todo: 'known bug - fix pending approval' }, async () => {
-    const s = await asManager();
-    await H.nav(s.app, 'reports');
-    await s.app.locator('[data-act=newReport]').click();
-    await s.app.locator('#modalForm select[name=classId]').selectOption('c3');
-    await s.app.locator('#modalForm textarea[name=summary]').fill('אחר');
-    await H.submitModal(s.app);
-    const db = await H.readDb(s.page);
-    assert.equal(db.reports.filter(r => r.date === TODAY && r.classId === 'c1').length, 1, 'class 1 keeps its report');
-    await s.context.close();
   });
 
   it('complaints: new complaint fills parent details, handling changes status', async () => {
@@ -392,6 +372,121 @@ describe('manager', () => {
     db = await H.readDb(s.page);
     assert.equal(db.children.length, 38);
     assert.equal(db.settings.gardenName, 'גן השמש');
+    await done(s);
+  });
+});
+
+// ------------------------------------------------------------------ daily report fix (approved)
+// Former bug: changing the class in an opened report moved the report to another class.
+describe('daily report: class and date locked when editing, no overwrites', () => {
+  const reportOf = (db, cls, date = TODAY) => db.reports.find(r => r.classId === cls && r.date === date);
+
+  it('manager: editing locks class and date in the form', async () => {
+    const s = await asManager();
+    await H.nav(s.app, 'reports');
+    const r = reportOf(await H.readDb(s.page), 'c1');
+    await s.app.locator(`[data-act=editReport][data-id="${r.id}"]`).click();
+    assert.equal(await s.app.locator('#modal h3').textContent(), 'עריכת דוח יומי');
+    assert.equal(await s.app.locator('#modalForm [name=classId], #modalForm [name=date]').count(), 0, 'no editable class/date fields');
+    assert.equal(await s.app.locator('#modalForm [data-locked=class]').isDisabled(), true);
+    assert.equal(await s.app.locator('#modalForm [data-locked=date]').isDisabled(), true);
+    assert.equal(await s.app.locator('#modalForm [data-locked=class]').inputValue(), 'תינוקייה');
+    await done(s);
+  });
+
+  it('manager: even a tampered form cannot move an existing report', async () => {
+    const s = await asManager();
+    await H.nav(s.app, 'reports');
+    const before = await H.readDb(s.page);
+    const r = reportOf(before, 'c1');
+    await s.app.locator(`[data-act=editReport][data-id="${r.id}"]`).click();
+    // inject fields the way a modified page could
+    await s.app.locator('#modalForm').evaluate(f => {
+      f.insertAdjacentHTML('beforeend', '<input type="hidden" name="classId" value="c3"><input type="hidden" name="date" value="2026-11-01">');
+    });
+    await s.app.locator('#modalForm textarea[name=summary]').fill('עדכון לגיטימי');
+    await H.submitModal(s.app);
+    const after = await H.readDb(s.page);
+    const same = after.reports.find(x => x.id === r.id);
+    assert.equal(same.classId, 'c1');
+    assert.equal(same.date, TODAY);
+    assert.equal(same.summary, 'עדכון לגיטימי');
+    assert.equal(same.staffId, r.staffId, 'author kept');
+    assert.equal(after.reports.length, before.reports.length);
+    assert.equal(reportOf(after, 'c3'), undefined, 'class 3 did not get class 1 report');
+    await done(s);
+  });
+
+  it('manager: a report for another class is a new report; existing reports untouched', async () => {
+    const s = await asManager();
+    await H.nav(s.app, 'reports');
+    const before = await H.readDb(s.page);
+    await s.app.locator('[data-act=newReport]').click();
+    await s.app.locator('#modalForm select[name=classId]').selectOption('c4');
+    await s.app.locator('#modalForm textarea[name=summary]').fill('דוח חדש לכיתה 4');
+    await H.submitModal(s.app);
+    const after = await H.readDb(s.page);
+    assert.equal(after.reports.length, before.reports.length + 1);
+    assert.equal(reportOf(after, 'c4').summary, 'דוח חדש לכיתה 4');
+    for (const c of ['c1', 'c2']) assert.deepEqual(reportOf(after, c), reportOf(before, c), c + ' unchanged');
+    await done(s);
+  });
+
+  it('manager: a new report on a class+date that already has one is blocked and changes nothing', async () => {
+    const s = await asManager();
+    await H.nav(s.app, 'reports');
+    const before = await H.readDb(s.page);
+    await s.app.locator('[data-act=newReport]').click();
+    await s.app.locator('#modalForm select[name=classId]').selectOption('c1');
+    await s.app.locator('#modalForm textarea[name=summary]').fill('ניסיון דריסה');
+    await H.submitModal(s.app);
+    assert.ok(await H.modal(s.app).isVisible(), 'form stays open with the typed text');
+    assert.equal(await s.app.locator('#modalForm textarea[name=summary]').inputValue(), 'ניסיון דריסה');
+    assert.ok((await H.toastTexts(s.app)).some(t => t.includes('כבר יש דוח')));
+    assert.deepEqual((await H.readDb(s.page)).reports, before.reports);
+    // another date for the same class is a new report
+    await s.app.locator('#modalForm input[name=date]').fill('2026-09-01');
+    await H.submitModal(s.app);
+    const after = await H.readDb(s.page);
+    assert.equal(after.reports.length, before.reports.length + 1);
+    assert.equal(reportOf(after, 'c1', '2026-09-01').summary, 'ניסיון דריסה');
+    assert.deepEqual(reportOf(after, 'c1'), reportOf(before, 'c1'), "today's class 1 report unchanged");
+    await done(s);
+  });
+
+  it('manager: with a class filter that already reported today, "+ daily report" opens it locked', async () => {
+    const s = await asManager();
+    await H.nav(s.app, 'reports');
+    await s.app.locator('select[data-filter=repClass]').selectOption('c2');
+    await s.app.locator('[data-act=newReport]').click();
+    assert.equal(await s.app.locator('#modal h3').textContent(), 'עריכת דוח יומי');
+    assert.equal(await s.app.locator('#modalForm [data-locked=class]').inputValue(), 'גיל שנה וחצי');
+    await done(s);
+  });
+
+  it('teacher: her existing report opens locked; a new report on an existing date is blocked', async () => {
+    const t = await asStaff('s1'); // class c1 already reported today
+    await t.app.locator('[data-act=newReport]').first().click();
+    assert.equal(await t.app.locator('#modal h3').textContent(), 'עריכת דוח יומי');
+    assert.equal(await t.app.locator('#modalForm [name=classId], #modalForm [name=date]').count(), 0);
+    await done(t);
+
+    const s = await asStaff('s5'); // class c3: no report today, has one yesterday
+    const before = await H.readDb(s.page);
+    await s.app.locator('[data-act=newReport]').first().click();
+    assert.equal(await s.app.locator('#modal h3').textContent(), 'דוח יומי חדש');
+    await s.app.locator('#modalForm input[name=date]').fill('2026-11-04');
+    await s.app.locator('#modalForm textarea[name=summary]').fill('דריסה של אתמול');
+    await H.submitModal(s.app);
+    assert.ok(await H.modal(s.app).isVisible());
+    assert.deepEqual((await H.readDb(s.page)).reports, before.reports, 'nothing changed');
+    // a teacher cannot create a report for another class, even with a tampered form
+    await s.app.locator('#modalForm input[name=date]').fill(TODAY);
+    await s.app.locator('#modalForm input[name=classId]').evaluate(el => { el.value = 'c4'; });
+    await H.submitModal(s.app);
+    const after = await H.readDb(s.page);
+    assert.equal(reportOf(after, 'c3').summary, 'דריסה של אתמול');
+    assert.equal(reportOf(after, 'c4'), undefined);
     await done(s);
   });
 });

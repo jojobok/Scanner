@@ -751,34 +751,69 @@ function requireFields(data, names) {
   return true;
 }
 
+// Daily report form.
+// - Editing an existing report: class and date are locked (in the form AND when saving),
+//   so a report can never move to another class or day.
+// - "+ daily report": the report of the chosen class for today. If that class already
+//   has today's report, it opens for editing (locked). Otherwise a new report is created;
+//   saving a new report for a class+date that already has one is blocked.
 function openReportModal(r) {
   const u = currentUser();
-  const isNew = !r;
-  const date = r ? r.date : todayStr();
-  const cls = r ? r.classId : (u.isManager ? fget('repClass', '') || db.classes[0]?.id : u.classId);
-  const existing = isNew ? db.reports.find(x => x.date === date && x.classId === cls) : null;
-  if (existing) r = existing;
-  const att = db.childAttendance[date] || {};
-  const autoCount = classKids(cls).filter(k => att[k.id] === 1).length;
-  openModal(r ? 'עריכת דוח יומי' : 'דוח יומי חדש', `<div class="form-grid">
-    ${fld('תאריך', inp('date', r ? r.date : date, 'date', 'required'))}
-    ${u.isManager ? fld('כיתה', `<select name="classId">${classOpts(cls)}</select>`) : `<input type="hidden" name="classId" value="${esc(cls)}">` + fld('כיתה', `<input value="${esc(className(cls))}" disabled>`)}
-    ${fld(`כמות ילדים שהגיעו היום ${autoCount ? `<span class="muted">(לפי הנוכחות: ${autoCount})</span>` : ''}`, inp('childrenCount', r ? r.childrenCount : autoCount, 'number', 'min="0" required'))}
-    <div></div>
-    ${fld('סיכום הפעילות היום *', area('summary', r?.summary, 'required rows="4" placeholder="מה עשינו היום: פעילויות, נושא שבועי, חוגים, משחקים…"'), 'full')}
-    ${fld('ארוחות', area('meals', r?.meals, 'rows="2" placeholder="מה אכלו, מי לא אכל…"'), 'full')}
-    ${fld('אירועים מיוחדים / פציעות / הערות', area('highlights', r?.highlights, 'rows="2"'), 'full')}</div>`,
+  const today = todayStr();
+  if (!r) {
+    const hasReport = c => db.reports.some(x => x.date === today && x.classId === c);
+    const cls = u.isManager
+      ? (fget('repClass', '') || (db.classes.find(c => !hasReport(c.id)) || db.classes[0] || {}).id)
+      : u.classId;
+    r = db.reports.find(x => x.date === today && x.classId === cls) || null;
+    if (!r) return openNewReportModal(u, cls, today);
+  }
+  const report = r;
+  const att = db.childAttendance[report.date] || {};
+  const autoCount = classKids(report.classId).filter(k => att[k.id] === 1).length;
+  openModal('עריכת דוח יומי', `<div class="form-grid">
+    ${fld('תאריך', `<input value="${esc(fmtDate(report.date))}" disabled data-locked="date">`)}
+    ${fld('כיתה', `<input value="${esc(className(report.classId))}" disabled data-locked="class">`)}
+    <p class="small muted full" style="margin:0">בעריכת דוח קיים הכיתה והתאריך נעולים. לדוח של כיתה או יום אחרים יוצרים דוח חדש.</p>
+    ${reportFieldsHtml(report, autoCount)}</div>`,
   data => {
-    if (!requireFields(data, ['date', 'classId', 'summary'])) return false;
-    const dup = db.reports.find(x => x.date === data.date && x.classId === data.classId && (!r || x.id !== r.id));
-    if (dup) { toast('כבר קיים דוח לכיתה זו בתאריך זה. אפשר לערוך אותו מרשימת הדוחות.', true); return false; }
-    const rec = { date: data.date, classId: data.classId, childrenCount: Number(data.childrenCount) || 0, summary: data.summary.trim(), meals: data.meals.trim(), highlights: data.highlights.trim() };
-    if (r) Object.assign(r, rec, { updatedAt: Date.now() });
-    else db.reports.push({ id: uid(), staffId: u.id, createdAt: Date.now(), ...rec });
-    logAction(`${r ? 'עדכון' : 'הגשת'} דוח יומי – ${className(data.classId)} ${fmtDate(data.date)} (${rec.childrenCount} ילדים)`);
+    if (!requireFields(data, ['summary'])) return false;
+    if (!db.reports.includes(report)) { toast('הדוח נמחק בינתיים ולא נשמר.', true); return false; }
+    Object.assign(report, reportContent(data), { updatedAt: Date.now() });
+    logAction(`עדכון דוח יומי – ${className(report.classId)} ${fmtDate(report.date)} (${report.childrenCount} ילדים)`);
     toast('הדוח נשמר');
   });
 }
+
+function openNewReportModal(u, cls, date) {
+  const att = db.childAttendance[date] || {};
+  const autoCount = classKids(cls).filter(k => att[k.id] === 1).length;
+  openModal('דוח יומי חדש', `<div class="form-grid">
+    ${fld('תאריך', inp('date', date, 'date', 'required'))}
+    ${u.isManager ? fld('כיתה', `<select name="classId">${classOpts(cls)}</select>`) : `<input type="hidden" name="classId" value="${esc(cls)}">` + fld('כיתה', `<input value="${esc(className(cls))}" disabled>`)}
+    ${reportFieldsHtml(null, autoCount)}</div>`,
+  data => {
+    if (!requireFields(data, ['date', 'classId', 'summary'])) return false;
+    const classId = u.isManager ? data.classId : u.classId;
+    if (db.reports.some(x => x.date === data.date && x.classId === classId)) {
+      toast(`ל${className(classId)} כבר יש דוח בתאריך ${fmtDate(data.date)}. הדוח הקיים לא שונה – אפשר לערוך אותו מרשימת הדוחות.`, true);
+      return false;
+    }
+    const rec = { date: data.date, classId, ...reportContent(data) };
+    db.reports.push({ id: uid(), staffId: u.id, createdAt: Date.now(), ...rec });
+    logAction(`הגשת דוח יומי – ${className(classId)} ${fmtDate(data.date)} (${rec.childrenCount} ילדים)`);
+    toast('הדוח נשמר');
+  });
+}
+
+function reportFieldsHtml(r, autoCount) {
+  return `${fld(`כמות ילדים שהגיעו היום ${autoCount ? `<span class="muted">(לפי הנוכחות: ${autoCount})</span>` : ''}`, inp('childrenCount', r ? r.childrenCount : autoCount, 'number', 'min="0" required'))}
+    <div></div>
+    ${fld('סיכום הפעילות היום *', area('summary', r?.summary, 'required rows="4" placeholder="מה עשינו היום: פעילויות, נושא שבועי, חוגים, משחקים…"'), 'full')}
+    ${fld('ארוחות', area('meals', r?.meals, 'rows="2" placeholder="מה אכלו, מי לא אכל…"'), 'full')}
+    ${fld('אירועים מיוחדים / פציעות / הערות', area('highlights', r?.highlights, 'rows="2"'), 'full')}`;
+}
+const reportContent = data => ({ childrenCount: Number(data.childrenCount) || 0, summary: data.summary.trim(), meals: data.meals.trim(), highlights: data.highlights.trim() });
 
 function openComplaintModal() {
   const u = currentUser();
