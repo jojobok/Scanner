@@ -25,15 +25,15 @@
   </style>
 </head>
 <body>
-<header><h1>Scanner Studio</h1><p>אולפן סרטוני פרשת השבוע · אבטיפוס מקומי</p></header>
+<header><h1>Scanner Studio</h1><p>אולפן סרטוני פרשת השבוע · תצוגה פרטית</p></header>
 <main>
   <section class="panel">
     <h2>הפקה חדשה</h2>
     <label for="portion">שם הפרשה</label><input id="portion" placeholder="לדוגמה: וירא" autocomplete="off">
     <label for="title">שם הסרטון</label><input id="title" placeholder="כותרת ההפקה" autocomplete="off">
-    <div class="actions"><button id="demo" class="secondary">טען תסריט הדגמה מהמנוע</button><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
+    <div class="actions"><button id="demo" class="secondary">צור תסריט הדגמה</button><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
   </section>
-  <section class="panel"><h2>לוח סצנות</h2><p class="notice">אפשר לטעון תסריט הדגמה ממנוע Scanner דרך שרת מקומי בלבד. אין חיבור ל־Grok או ל־Google Drive. הטיוטה נשמרת במכשיר זה בלבד.</p><div id="scenes"></div></section>
+  <section class="panel"><h2>לוח סצנות</h2><p class="notice">תסריט הדגמה בלבד, המבוסס על תבנית הבדיקה של Scanner. אינו תסריט תורני מאומת. אין חיבור ל־Grok או ל־Google Drive. טיוטות נשמרות במכשיר זה בלבד.</p><div id="scenes"></div></section>
 </main>
 <script src="./studio.js" defer></script>
 </body>
