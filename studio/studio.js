@@ -46,3 +46,30 @@ $("export").addEventListener("click",()=>{
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 render();
+
+$("demo").addEventListener("click", async () => {
+  const button = $("demo");
+  const portion = $("portion").value.trim();
+  if (!portion) { alert("יש להזין שם פרשה"); return; }
+  if (project.scenes.length && !confirm("טעינת הדגמה תחליף את הסצנות בטיוטה המקומית. להמשיך?")) return;
+  button.disabled = true;
+  button.textContent = "טוען תסריט...";
+  try {
+    const response = await fetch("/api/demo-script", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({portion})
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "שגיאה בשרת");
+    project.portion = result.parasha;
+    project.title = result.title;
+    project.scenes = result.scenes;
+    $("title").value = project.title;
+    save(); render();
+  } catch (error) {
+    alert("לא ניתן לטעון תסריט: " + error.message + ". יש להפעיל את שרת האולפן המקומי.");
+  } finally {
+    button.disabled = false;
+    button.textContent = "טען תסריט הדגמה מהמנוע";
+  }
+});
