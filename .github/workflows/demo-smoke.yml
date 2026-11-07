@@ -41,7 +41,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import json, subprocess
-          files = list(Path("demo-output").rglob("*.mp4"))
+          files = [p for p in Path("demo-output").rglob("*.mp4") if "build" not in p.parts]
           assert len(files) == 1, f"Expected one MP4, got {files}"
           info = json.loads(subprocess.check_output(
               ["ffprobe", "-v", "error", "-show_streams", "-show_format",
