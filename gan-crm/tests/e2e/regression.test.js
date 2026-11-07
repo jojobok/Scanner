@@ -612,3 +612,35 @@ describe('layout and modes', () => {
     await done(s);
   });
 });
+
+// ------------------------------------------------------------------ packaging (stage 0.3: app split into files)
+describe('packaging after the split into files', () => {
+  it('opens directly from a file on the computer (no server)', async () => {
+    const s = await H.openApp({ fileUrl: 'file://' + require('node:path').join(H.APP_DIR, 'index.html') });
+    await H.login(s.app, 'manager', '1234');
+    for (const v of MANAGER_VIEWS) await H.nav(s.app, v);
+    await done(s);
+  });
+
+  it('the single-file build works inside a frame (the iPhone link version)', async () => {
+    const path = require('node:path');
+    const out = path.join(H.APP_DIR, 'dist', 'regression-single.html');
+    require('node:child_process').execFileSync(process.execPath, [path.join(H.APP_DIR, 'tools', 'build-single-file.js'), out]);
+    const html = require('node:fs').readFileSync(out, 'utf8');
+    assert.ok(!/<script src=/.test(html) && !/<link rel="stylesheet"/.test(html), 'everything inlined');
+    const s = await H.openApp({ embedded: true, appPath: '/dist/regression-single.html' });
+    await H.login(s.app, 'manager', '1234');
+    for (const v of MANAGER_VIEWS) await H.nav(s.app, v);
+    await H.nav(s.app, 'payroll');
+    assert.equal(await s.app.locator('[data-act=print]').isVisible(), false);
+    await done(s);
+  });
+
+  it('if saving to the device fails at start-up, the app still opens and shows an error message', async () => {
+    const s = await H.openApp({ initScript: () => { Storage.prototype.setItem = () => { throw new Error('quota'); }; } });
+    assert.ok((await H.toastTexts(s.app)).some(t => t.includes('שמירה נכשלה')));
+    await H.login(s.app, 'manager', '1234');
+    await s.app.locator('.page-head h1', { hasText: 'לוח בקרה' }).waitFor();
+    await done(s);
+  });
+});

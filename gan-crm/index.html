@@ -10,6 +10,31 @@
 <div id="app"></div>
 <div id="modal" hidden></div>
 <div id="toasts" aria-live="polite"></div>
-<script src="app.js"></script>
+<!-- Classic scripts that share one global scope. ORDER MATTERS: each file may use what earlier files define. -->
+<script src="js/util.js"></script>
+<script src="js/ui/components.js"></script>
+<script src="js/ui/modal.js"></script>
+<script src="js/data/seed.js"></script>
+<script src="js/data/store.js"></script>
+<script src="js/data/session.js"></script>
+<script src="js/data/queries.js"></script>
+<script src="js/views/login-nav.js"></script>
+<script src="js/views/dashboard.js"></script>
+<script src="js/views/myday.js"></script>
+<script src="js/views/classes.js"></script>
+<script src="js/views/children.js"></script>
+<script src="js/views/staff.js"></script>
+<script src="js/views/attendance.js"></script>
+<script src="js/views/reports.js"></script>
+<script src="js/views/complaints.js"></script>
+<script src="js/views/schedule.js"></script>
+<script src="js/views/messages.js"></script>
+<script src="js/views/reminders.js"></script>
+<script src="js/views/payroll.js"></script>
+<script src="js/views/log.js"></script>
+<script src="js/views/settings.js"></script>
+<script src="js/forms.js"></script>
+<script src="js/actions.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>

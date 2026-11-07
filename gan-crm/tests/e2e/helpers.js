@@ -13,11 +13,13 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 function startServer() {
   const server = http.createServer((req, res) => {
-    const url = decodeURIComponent(req.url.split('?')[0]);
+    const [rawPath, query = ''] = req.url.split('?');
+    const url = decodeURIComponent(rawPath);
     if (url === '/__frame.html') {
       // Imitates the app running inside a sandboxed frame (downloads/print blocked)
+      const src = new URLSearchParams(query).get('src') || '/index.html';
       res.writeHead(200, { 'content-type': TYPES['.html'] });
-      return res.end('<!doctype html><meta charset="utf-8"><style>html,body,iframe{margin:0;border:0;width:100%;height:100%}</style><iframe src="/index.html"></iframe>');
+      return res.end(`<!doctype html><meta charset="utf-8"><style>html,body,iframe{margin:0;border:0;width:100%;height:100%}</style><iframe src="${src.replace(/[^\w/.-]/g, '')}"></iframe>`);
     }
     const file = path.join(APP_DIR, url === '/' ? 'index.html' : url);
     if (!file.startsWith(APP_DIR) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end(); }
@@ -38,7 +40,7 @@ async function teardown() {
 }
 
 /** Fresh browser context = fresh localStorage = fresh demo data. */
-async function openApp({ viewport = { width: 1280, height: 900 }, colorScheme = 'light', embedded = false, isMobile = false } = {}) {
+async function openApp({ viewport = { width: 1280, height: 900 }, colorScheme = 'light', embedded = false, isMobile = false, appPath = '/index.html', fileUrl = null, initScript = null } = {}) {
   const context = await browser.newContext({ viewport, colorScheme, isMobile, hasTouch: isMobile, timezoneId: 'Asia/Jerusalem', locale: 'he-IL', acceptDownloads: true });
   const page = await context.newPage();
   const errors = [];
@@ -46,7 +48,9 @@ async function openApp({ viewport = { width: 1280, height: 900 }, colorScheme = 
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('dialog', d => { errors.push('native dialog shown: ' + d.message()); d.dismiss(); });
   await page.clock.setFixedTime(FIXED_NOW);
-  await page.goto(srv.base + (embedded ? '/__frame.html' : '/index.html'));
+  if (initScript) await context.addInitScript(initScript);
+  if (fileUrl) await page.goto(fileUrl);
+  else await page.goto(srv.base + (embedded ? '/__frame.html?src=' + encodeURIComponent(appPath) : appPath));
   const app = embedded ? page.frameLocator('iframe') : page;
   return { context, page, app, errors };
 }
@@ -70,4 +74,4 @@ const modal = app => app.locator('#modal .modal-box');
 const submitModal = app => app.locator('#modalForm button[type=submit]').click();
 const toastTexts = app => app.locator('#toasts .toast').allTextContents();
 
-module.exports = { setup, teardown, openApp, login, nav, logout, readDb, statValue, modal, submitModal, toastTexts, FIXED_NOW };
+module.exports = { APP_DIR, setup, teardown, openApp, login, nav, logout, readDb, statValue, modal, submitModal, toastTexts, FIXED_NOW };
