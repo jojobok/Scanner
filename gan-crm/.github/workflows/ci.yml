@@ -1,0 +1,36 @@
+# Runs on every pull request in the gan-crm private repository.
+# (While gan-crm still lives inside the Scanner repository this file is inactive:
+#  GitHub only reads workflows from the repository root.)
+# Uses only fictional data. Never connects to a real Supabase project.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  database-permissions:
+    name: Database permissions (local PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run migrations + RLS tests on a throwaway database
+        run: bash supabase/tests/run_local_tests.sh
+
+  app-regression:
+    name: App regression (all existing screens)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

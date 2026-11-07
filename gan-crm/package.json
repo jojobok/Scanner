@@ -1,0 +1,13 @@
+{
+  "name": "gan-crm",
+  "private": true,
+  "description": "Kindergarten CRM - regression and permission tests",
+  "scripts": {
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/regression.test.js",
+    "test:db": "bash supabase/tests/run_local_tests.sh",
+    "test": "npm run test:db && npm run test:e2e"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
