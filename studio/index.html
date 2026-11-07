@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <meta name="description" content="אולפן הפקת סרטוני פרשת השבוע">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <title>Scanner Studio</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,Arial,sans-serif;background:#101827;color:#f5f7fa}
+    *{box-sizing:border-box}body{margin:0;min-height:100dvh}header{padding:calc(16px + env(safe-area-inset-top)) 18px 16px;background:#182338;border-bottom:1px solid #344157}
+    h1{margin:0;font-size:1.35rem}header p{margin:5px 0 0;color:#aab9cb;font-size:.85rem}
+    main{max-width:800px;margin:auto;padding:18px 16px calc(40px + env(safe-area-inset-bottom))}
+    .panel{background:#1b293d;border:1px solid #344157;border-radius:16px;padding:18px;margin-bottom:16px}
+    h2{font-size:1.08rem;margin:0 0 14px}label{display:block;margin:12px 0 6px;color:#c9d6e4;font-size:.9rem}
+    input,textarea,select{width:100%;border:1px solid #4a5b73;background:#111d30;color:#fff;border-radius:10px;padding:12px;font:inherit}
+    textarea{min-height:100px;resize:vertical}button{font:inherit;border:0;border-radius:10px;padding:12px 16px;cursor:pointer}
+    .primary{background:#bca475;color:#121b2c;font-weight:700}.secondary{background:#34455f;color:white}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .scene{padding:13px;border:1px solid #465670;border-radius:12px;margin:10px 0;background:#142136}
+    .scene strong{display:block;margin-bottom:5px}.status{font-size:.82rem;color:#b9c6d7}
+    .notice{border-right:3px solid #bca475;padding:8px 12px;color:#d9e2ed;font-size:.88rem}
+    [hidden]{display:none!important}
+  </style>
+</head>
+<body>
+<header><h1>Scanner Studio</h1><p>אולפן סרטוני פרשת השבוע · אבטיפוס מקומי</p></header>
+<main>
+  <section class="panel">
+    <h2>הפקה חדשה</h2>
+    <label for="portion">שם הפרשה</label><input id="portion" placeholder="לדוגמה: וירא" autocomplete="off">
+    <label for="title">שם הסרטון</label><input id="title" placeholder="כותרת ההפקה" autocomplete="off">
+    <div class="actions"><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
+  </section>
+  <section class="panel"><h2>לוח סצנות</h2><p class="notice">זהו אבטיפוס לתכנון ועריכה בלבד. אין עדיין חיבור לשרת, ל־Grok או ל־Google Drive. הנתונים נשמרים במכשיר זה בלבד.</p><div id="scenes"></div></section>
+</main>
+<script src="./studio.js" defer></script>
+</body>
+</html>
