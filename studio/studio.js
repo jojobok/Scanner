@@ -51,7 +51,7 @@ $("demo").addEventListener("click", async () => {
   const button = $("demo");
   const portion = $("portion").value.trim();
   if (!portion) { alert("יש להזין שם פרשה"); return; }
-  if (project.scenes.length && !confirm("טעינת הדגמה תחליף את הסצנות בטיוטה המקומית. להמשיך?")) return;
+  if (project.scenes.length && !confirm("טעינת הדגמה תחליף את הסצנות בטיוטה המקומית. עותק גיבוי יישמר במכשיר. להמשיך?")) return;
   button.disabled = true;
   button.textContent = "טוען תסריט...";
   try {
@@ -61,15 +61,16 @@ $("demo").addEventListener("click", async () => {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "שגיאה בשרת");
+    if (project.scenes.length) localStorage.setItem("scanner-studio-backup-" + Date.now(), JSON.stringify(project));
     project.portion = result.parasha;
     project.title = result.title;
     project.scenes = result.scenes;
     $("title").value = project.title;
     save(); render();
   } catch (error) {
-    alert("לא ניתן לטעון תסריט: " + error.message + ". יש להפעיל את שרת האולפן המקומי.");
+    alert("לא ניתן לטעון תסריט: " + error.message + ".");
   } finally {
     button.disabled = false;
-    button.textContent = "טען תסריט הדגמה מהמנוע";
+    button.textContent = "צור תסריט הדגמה";
   }
 });
