@@ -113,10 +113,36 @@ function render() {
     openGrok.addEventListener("click",()=>{
       try{navigator.clipboard.writeText(grokText.value).then(()=>{openGrok.textContent="הועתק – הדבק ב־Grok"},()=>{grokText.focus();grokText.select()})}catch(_){grokText.focus();grokText.select()}
     });
+    // image-to-video in Grok's own page needs the approved image as the first frame:
+    // hand the original file back to the user (iOS share sheet -> Save Image, or a download)
+    const saveApproved=document.createElement("button");saveApproved.type="button";saveApproved.className="secondary";
+    saveApproved.textContent="שמור את התמונה המאושרת למכשיר";saveApproved.hidden=true;
+    function approvedMedia(){
+      return project.media.find(m=>m.id===scene.approved_media_id)
+        ||[...project.media].reverse().find(m=>m.type==="I"&&m.request_id&&m.request_id===scene.approved_image_request&&m.scene_uid===scene.uid);
+    }
+    saveApproved.addEventListener("click",async()=>{
+      const m=approvedMedia();if(!m){alert("התמונה המאושרת לא שמורה במכשיר. צרף אותה קודם.");return}
+      let rec;try{rec=await MEDIA.get(m.id)}catch(_){}
+      if(!rec||!rec.blob){alert("הקובץ לא נמצא במכשיר.");return}
+      const ext=(m.name.match(/\.[a-z0-9]+$/i)||[".jpg"])[0];
+      const file=new File([rec.blob],(m.request_id||"approved-image")+ext,{type:m.mime||rec.blob.type||"image/jpeg"});
+      try{
+        if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}
+      }catch(err){if(err&&err.name==="AbortError")return}
+      const url=URL.createObjectURL(file);const a=document.createElement("a");a.href=url;a.download=file.name;document.body.append(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });
     function showGrok(req){
       const show=!!(req&&req.grok);
       grokTitle.hidden=grokText.hidden=openGrok.hidden=grokHint.hidden=!show;
+      const video=show&&req.type==="V";
+      saveApproved.hidden=!video;
       if(show){grokText.value=req.grok;openGrok.textContent="העתק ופתח ב־Grok"}
+      grokHint.textContent=video
+        ?(approvedMedia()?"לסרטון: 1. שמור את התמונה המאושרת למכשיר. 2. העתק ופתח ב־Grok. 3. ב־Grok Imagine העלה את התמונה, הדבק את ההוראה וצור סרטון. 4. שמור את הסרטון וחזור ל\"צרף תוצר מ־Grok\"."
+          :"התמונה המאושרת לא שמורה במכשיר, ולכן אי אפשר להעביר אותה ל־Grok מכאן. צרף אותה קודם ב\"צרף תוצר מ־Grok\" ואשר אותה.")
+        :"הפרומפט מועתק ו־Grok נפתח בלשונית חדשה. מדביקים, יוצרים, שומרים את הקובץ במכשיר, וחוזרים לכאן ל\"צרף תוצר מ־Grok\".";
     }
     // bring the result back: stored on this device only, linked to the scene and request
     const attachLabel=document.createElement("label");attachLabel.className="secondary file-button";attachLabel.textContent="צרף תוצר מ־Grok";
@@ -252,7 +278,7 @@ function render() {
     renderRequests();
     const genActions=document.createElement("div");genActions.className="actions";genActions.append(generateButton,videoButton);
     const attachRow=document.createElement("div");attachRow.className="actions";attachRow.append(attachLabel);
-    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,genActions,grokTitle,grokText,openGrok,grokHint,attachRow,attachStatus,packageArea,copyPackage,requestList,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
+    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,genActions,grokTitle,grokHint,saveApproved,grokText,openGrok,attachRow,attachStatus,packageArea,copyPackage,requestList,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
     card.append(heading,status,details);root.append(card);
   });
 }
