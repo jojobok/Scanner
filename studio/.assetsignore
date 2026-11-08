@@ -1,0 +1,4 @@
+worker/
+server.py
+__pycache__/
+*.md

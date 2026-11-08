@@ -11,7 +11,7 @@ function load() {
 }
 const project = load();
 const SR = window.StudioRequests;
-const GB = window.StudioGrok, MEDIA = window.StudioMedia;
+const GB = window.StudioGrok, MEDIA = window.StudioMedia, CLOUD = window.StudioCloud;
 let objectUrls = []; // previews of files kept on this device; released on every redraw
 // Stores one file as a new version. Returns {entry} or {duplicate} or {error}.
 async function storeFile(file, sceneUidValue, requestId, reason){
@@ -35,6 +35,51 @@ function linkToRequest(entry,scene,req){
   scene.approved=false;
   MEDIA.setScene(entry.id,scene.uid).catch(()=>{});
 }
+// ---- automatic path: request -> studio server queue -> Grok Bot routine -> result imported here
+function approvedMediaOf(scene){
+  return project.media.find(m=>m.id===scene.approved_media_id)
+    ||[...project.media].reverse().find(m=>m.type==="I"&&m.request_id&&m.request_id===scene.approved_image_request&&m.scene_uid===scene.uid);
+}
+async function sendToBot(scene,req){
+  if(!CLOUD.state.available)return;
+  req.cloud="sending";req.cloud_error=null;save();
+  try{
+    let source=null;
+    if(req.type==="V"){
+      const m=approvedMediaOf(scene);const rec=m&&await MEDIA.get(m.id);
+      source={id:scene.approved_image_request,blob:rec&&rec.blob};
+    }
+    await CLOUD.submit(req,source);req.cloud="queued";
+  }catch(err){req.cloud="error";req.cloud_error=err.message}
+  save();render();
+}
+let polling=false;
+async function pollBot(){
+  if(polling||!CLOUD.state.available||document.hidden)return;
+  polling=true;let changed=false;
+  try{
+    for(const scene of project.scenes){
+      for(const req of scene.requests.filter(r=>r.status==="waiting"&&r.cloud==="queued")){
+        let st;try{st=await CLOUD.status(req.id)}catch(_){continue}
+        if(st.status==="failed"){req.cloud="failed";req.cloud_error=st.error;changed=true;continue}
+        if(st.status==="claimed"&&req.cloud_seen!=="claimed"){req.cloud_seen="claimed";changed=true}
+        const imported=req.cloud_imported||(req.cloud_imported=[]);
+        for(const f of st.files||[]){
+          if(imported.includes(f.file_id))continue;
+          const blob=await CLOUD.file(f.file_id);
+          const res=await storeFile(new File([blob],f.name,{type:f.mime}),null,req.id);
+          imported.push(f.file_id);
+          if(res.entry){res.entry.remote_file_id=f.file_id;linkToRequest(res.entry,scene,req)}
+          else if(res.duplicate){req.status="received"}
+          changed=true;
+        }
+      }
+    }
+  }finally{polling=false}
+  if(changed){save();render();renderIntake()}
+}
+CLOUD.health().then(st=>{if(st.available){render();pollBot();setInterval(pollBot,20000)}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollBot()});
 function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 (function migrate(){
   let changed=false;
@@ -174,7 +219,8 @@ function render() {
       scene.requests.slice(-4).reverse().forEach(r=>{
         const li=document.createElement("li");
         const code=document.createElement("code");code.textContent=r.id;
-        li.append(code," · ",(r.type==="V"?"סרטון":"תמונה")," · ",STATUS_TEXT[r.status]||r.status);
+        const CLOUD_TEXT={sending:"נשלחת ל־Grok Bot",queued:r.cloud_seen==="claimed"?"Grok Bot יוצר":"בתור של Grok Bot",error:"שליחה נכשלה",failed:"Grok Bot נכשל"};
+        li.append(code," · ",(r.type==="V"?"סרטון":"תמונה")," · ",(r.status==="waiting"&&CLOUD_TEXT[r.cloud])||STATUS_TEXT[r.status]||r.status);
         requestList.append(li);
       });
       const img=latest("I");
@@ -184,7 +230,14 @@ function render() {
         ?"בקשה "+img.id+" ממתינה. העתק את ההוראה ל־Grok Bot. הקובץ יישמר בשם הזה בתיקייה "+SR.DEFAULT_FOLDER+"."
         :"נוצר ב־Grok Bot במנוי שלך ונשמר בתיקיית "+SR.DEFAULT_FOLDER+" ב־Google Drive. האולפן לא מתחבר לחשבון Grok ואין חיובים.";
       if(img&&img.status==="waiting")generationStatus.textContent="בקשה "+img.id+" ממתינה. \"העתק ופתח ב־Grok\" ליצירה בחשבון שלך, ואז \"צרף תוצר מ־Grok\".";
-      const open=[...scene.requests].reverse().find(r=>r.status==="waiting"&&r.grok);
+      if(img&&img.status==="waiting"&&img.cloud){
+        const seen=CLOUD.state.bot_last_seen?" · Grok Bot בדק לאחרונה ב־"+new Date(CLOUD.state.bot_last_seen).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):" · Grok Bot עדיין לא התחבר לשרת";
+        generationStatus.textContent={sending:"שולח ל־Grok Bot...",queued:(img.cloud_seen==="claimed"?"Grok Bot יוצר את התמונה":"נשלח ל־Grok Bot, ממתין ליצירה")+seen,
+          error:"השליחה לשרת נכשלה: "+(img.cloud_error||""),failed:"Grok Bot דיווח על כשל: "+(img.cloud_error||"")+". לחץ שוב \"צור תמונה\" לבקשה חדשה."}[img.cloud]||generationStatus.textContent;
+      }
+      const vid=latest("V");
+      if(vid&&vid.status==="waiting"&&vid.cloud)videoButton.title={queued:"הסרטון נשלח ל־Grok Bot",failed:"Grok Bot דיווח על כשל: "+(vid.cloud_error||"")}[vid.cloud]||"";
+      const open=[...scene.requests].reverse().find(r=>r.status==="waiting"&&r.grok&&!r.cloud);
       showGrok(open);
     }
     function addRequest(type,text,extra){
@@ -194,7 +247,8 @@ function render() {
       req.package=text(id);
       scene.requests.push(req);save();
       packageArea.value=req.package;packageArea.hidden=false;copyPackage.hidden=false;copyPackage.textContent="העתק הוראה ל־Grok Bot";
-      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision}):GB.videoPrompt({motion:req.motion});save();showGrok(req);
+      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision}):GB.videoPrompt({motion:req.motion});save();
+      if(CLOUD.state.available){sendToBot(scene,req)}else{showGrok(req)}
       renderRequests();
     }
     generateButton.addEventListener("click",()=>{

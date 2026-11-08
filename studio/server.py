@@ -55,6 +55,7 @@ class Handler(BaseHTTPRequestHandler):
                    "/requests.js": "text/javascript; charset=utf-8",
                    "/grok.js": "text/javascript; charset=utf-8",
                    "/media.js": "text/javascript; charset=utf-8",
+                   "/cloud.js": "text/javascript; charset=utf-8",
                    "/manifest.webmanifest": "application/manifest+json"}
         if path not in allowed:
             return self.send_error(404)
