@@ -16,6 +16,7 @@ function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(project)); }
 for (const id of ["portion","title"]) {
   $(id).addEventListener("input", () => { project[id] = $(id).value; save(); });
 }
+let expandedScene = null;
 function render() {
   const root = $("scenes");
   root.replaceChildren();
@@ -24,7 +25,8 @@ function render() {
   }
   project.scenes.forEach((scene, index) => {
     const card = document.createElement("article"); card.className="scene";
-    const heading = document.createElement("strong"); heading.textContent="סצנה " + (index + 1);
+    const heading = document.createElement("button"); heading.type="button"; heading.className="scene-toggle"; heading.setAttribute("aria-expanded",String(expandedScene===index)); heading.textContent="סצנה " + (index + 1) + (expandedScene===index ? "  ▲" : "  ▼");
+    heading.addEventListener("click",()=>{expandedScene=expandedScene===index?null:index;render();});
     const status = document.createElement("p"); status.className="status"; status.textContent=scene.approved?"מאושרת":"ממתינה לאישור";
     const label = document.createElement("label"); label.textContent="קריינות";
     const area = document.createElement("textarea"); area.value=scene.narration || "";
@@ -34,17 +36,20 @@ function render() {
     const approve = document.createElement("button"); approve.className="primary"; approve.textContent="אשר סצנה";
     approve.addEventListener("click",()=>{scene.approved=true;save();render();});
     const remove = document.createElement("button"); remove.className="secondary"; remove.textContent="מחק סצנה";
-    remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;project.scenes.splice(index,1);save();render();});
+    remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;project.scenes.splice(index,1);expandedScene=null;save();render();});
     const promptLabel = document.createElement("label"); promptLabel.textContent="פרומפט לתמונה (אנגלית)";
     const promptArea = document.createElement("textarea"); promptArea.value=scene.image_prompt || "";
     promptArea.dir="ltr"; promptArea.style.textAlign="left";
     promptArea.setAttribute("aria-label","פרומפט לתמונה סצנה " + (index + 1));
     promptArea.placeholder="Cinematic biblical scene, vertical 9:16...";
     promptArea.addEventListener("input",()=>{scene.image_prompt=promptArea.value;scene.approved=false;status.textContent="ממתינה לאישור";save();});
-    actions.append(approve,remove);card.append(heading,status,label,area,promptLabel,promptArea,actions);root.append(card);
+    actions.append(approve,remove);
+    const details=document.createElement("div");details.hidden=expandedScene!==index;
+    details.append(label,area,promptLabel,promptArea,actions);
+    card.append(heading,status,details);root.append(card);
   });
 }
-$("add").addEventListener("click",()=>{project.scenes.push({narration:"",image_prompt:"",approved:false});save();render();});
+$("add").addEventListener("click",()=>{project.scenes.push({narration:"",image_prompt:"",approved:false});expandedScene=project.scenes.length-1;save();render();});
 $("export").addEventListener("click",()=>{
   const blob = new Blob([JSON.stringify(project,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
@@ -78,7 +83,7 @@ $("demo").addEventListener("click", () => {
     project.title = result.title;
     project.scenes = result.scenes;
     $("title").value = project.title;
-    save(); render();
+    expandedScene=0;save(); render();
   } catch (error) {
     alert("לא ניתן ליצור תסריט הדגמה: " + error.message);
   } finally {
