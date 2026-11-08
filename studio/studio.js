@@ -43,9 +43,29 @@ function render() {
     promptArea.setAttribute("aria-label","פרומפט לתמונה סצנה " + (index + 1));
     promptArea.placeholder="Cinematic biblical scene, vertical 9:16...";
     promptArea.addEventListener("input",()=>{scene.image_prompt=promptArea.value;scene.approved=false;status.textContent="ממתינה לאישור";save();});
+    const mediaTitle=document.createElement("strong");mediaTitle.textContent="מדיה לסצנה";
+    const mediaNote=document.createElement("p");mediaNote.className="status";mediaNote.textContent="קישורים לתצוגה בלבד. לא מתבצעת יצירת תמונה או וידאו.";
+    const imageLabel=document.createElement("label");imageLabel.textContent="קישור לתמונה (HTTPS)";
+    const imageInput=document.createElement("input");imageInput.type="url";imageInput.dir="ltr";imageInput.placeholder="https://...";
+    imageInput.value=scene.image_url||"";
+    const videoLabel=document.createElement("label");videoLabel.textContent="קישור לסרטון (HTTPS)";
+    const videoInput=document.createElement("input");videoInput.type="url";videoInput.dir="ltr";videoInput.placeholder="https://...";
+    videoInput.value=scene.video_url||"";
+    const preview=document.createElement("div");preview.className="media-preview";
+    function safeUrl(value){try{const u=new URL(value);return u.protocol==="https:"?u.href:null}catch(_){return null}}
+    function showPreview(){
+      preview.replaceChildren();
+      const imageUrl=safeUrl(imageInput.value.trim()),videoUrl=safeUrl(videoInput.value.trim());
+      if(imageUrl){const image=document.createElement("img");image.src=imageUrl;image.alt="תצוגת תמונה לסצנה "+(index+1);image.loading="lazy";image.referrerPolicy="no-referrer";preview.append(image)}
+      if(videoUrl){const video=document.createElement("video");video.src=videoUrl;video.controls=true;video.preload="none";video.setAttribute("playsinline","");preview.append(video)}
+      if(!imageUrl&&!videoUrl){const note=document.createElement("p");note.className="status";note.textContent="לא צורפה מדיה לסצנה.";preview.append(note)}
+    }
+    function updateMedia(){scene.image_url=imageInput.value.trim();scene.video_url=videoInput.value.trim();scene.approved=false;status.textContent="ממתינה לאישור";save();showPreview()}
+    imageInput.addEventListener("change",updateMedia);videoInput.addEventListener("change",updateMedia);
+    showPreview();
     actions.append(approve,remove);
     const details=document.createElement("div");details.hidden=expandedScene!==index;
-    details.append(label,area,promptLabel,promptArea,actions);
+    details.append(label,area,promptLabel,promptArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
     card.append(heading,status,details);root.append(card);
   });
 }
