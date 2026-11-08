@@ -55,7 +55,23 @@ function render() {
     copyPrompt.addEventListener("click",async()=>{
       try{await navigator.clipboard.writeText(prepared.value);copyPrompt.textContent="הועתק"}catch(_){prepared.focus();prepared.select();alert("סמן והעתק את הפרומפט ידנית")}
     });
-    const mediaTitle=document.createElement("strong");mediaTitle.textContent="מדיה לסצנה";
+    const generationTitle=document.createElement("strong");generationTitle.textContent="יצירת תמונה";
+    const generationStatus=document.createElement("p");generationStatus.className="status";
+    generationStatus.textContent="מנוע תמונות: לא מחובר. אין חיובים.";
+    const generateButton=document.createElement("button");generateButton.type="button";generateButton.className="primary";generateButton.textContent="צור תמונה";
+    generateButton.addEventListener("click",()=>{
+      alert("יצירת תמונות אוטומטית עדיין לא מחוברת. הפרומפט מוכן, אך נדרש חיבור מאובטח לספק תמונות AI לפני הפעלת הכפתור. לא בוצע חיוב.");
+    });
+    const imageStatusLabel=document.createElement("label");imageStatusLabel.textContent="מצב תמונה";
+    const imageStatus=document.createElement("select");
+    [["not_started","טרם נוצרה"],["review","ממתינה לבדיקה"],["approved","תמונה אושרה"],["revision","נדרש תיקון"]].forEach(([value,title])=>{const option=document.createElement("option");option.value=value;option.textContent=title;imageStatus.append(option)});
+    imageStatus.value=scene.image_status||"not_started";
+    imageStatus.addEventListener("change",()=>{scene.image_status=imageStatus.value;scene.approved=false;status.textContent="ממתינה לאישור";save()});
+    const revisionLabel=document.createElement("label");revisionLabel.textContent="הערות לתיקון תמונה";
+    const revisionArea=document.createElement("textarea");revisionArea.value=scene.image_revision||"";
+    revisionArea.placeholder="מה לשנות בתמונה?";
+    revisionArea.addEventListener("input",()=>{scene.image_revision=revisionArea.value;scene.image_status="revision";imageStatus.value="revision";scene.approved=false;status.textContent="ממתינה לאישור";save()});
+        const mediaTitle=document.createElement("strong");mediaTitle.textContent="מדיה לסצנה";
     const mediaNote=document.createElement("p");mediaNote.className="status";mediaNote.textContent="קישורים לתצוגה בלבד. לא מתבצעת יצירת תמונה או וידאו.";
     const imageLabel=document.createElement("label");imageLabel.textContent="קישור לתמונה (HTTPS)";
     const imageInput=document.createElement("input");imageInput.type="url";imageInput.dir="ltr";imageInput.placeholder="https://...";
@@ -77,7 +93,7 @@ function render() {
     showPreview();
     actions.append(approve,remove);
     const details=document.createElement("div");details.hidden=expandedScene!==index;
-    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
+    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,generateButton,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
     card.append(heading,status,details);root.append(card);
   });
 }
