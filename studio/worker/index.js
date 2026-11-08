@@ -18,8 +18,16 @@ const SR = globalThis.StudioRequests;
 
 export const MAX_BYTES = 25 * 1024 * 1024; // Workers KV value limit
 const CLAIM_MINUTES = 30;
+// same security headers and CSP as the previously deployed studio worker
+const SECURITY = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" };
+const CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src https: blob:; media-src https: blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+function secure(resp, extra) {
+  const r = new Response(resp.body, resp);
+  for (const [k, v] of Object.entries(Object.assign({}, SECURITY, extra || {}))) r.headers.set(k, v);
+  return r;
+}
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
-  status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+  status, headers: Object.assign({ "content-type": "application/json; charset=utf-8" }, SECURITY) });
 const fail = (status, error) => json({ error }, status);
 
 // ---------- auth
@@ -35,7 +43,14 @@ async function accessKeys(env) {
   jwksCache = { at: Date.now(), keys: (await res.json()).keys || [] };
   return jwksCache.keys;
 }
-export async function verifyOwner(request, env) {
+export async function verifyOwner(request, env, ctx) {
+  if (!env.OWNER_EMAIL) return null; // fail closed
+  // Cloudflare Access for workers.dev (what the previous studio worker used)
+  if (ctx && ctx.access) {
+    let identity; try { identity = await ctx.access.getIdentity(); } catch (_) { return null; }
+    const email = identity && identity.email ? String(identity.email).toLowerCase() : "";
+    return email && email === String(env.OWNER_EMAIL).toLowerCase() ? email : null;
+  }
   if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.OWNER_EMAIL) return null; // fail closed
   const token = request.headers.get("Cf-Access-Jwt-Assertion");
   if (!token) return null;
@@ -211,8 +226,20 @@ async function botApi(request, env, url) {
   return fail(404, "unknown route");
 }
 
+const TYPES = { ".js": "text/javascript; charset=utf-8", ".webmanifest": "application/manifest+json; charset=utf-8", ".html": "text/html; charset=utf-8" };
+async function staticFile(request, env, url) {
+  if (env.ASSETS) return secure(await env.ASSETS.fetch(request), { "Content-Security-Policy": CSP });
+  const content = globalThis.__STUDIO_CONTENT || {}; // inlined by build.mjs for API deploys
+  const path = url.pathname === "/" ? "/index.html" : url.pathname;
+  if (request.method !== "GET" && request.method !== "HEAD") return fail(405, "method not allowed");
+  if (!(path in content)) return fail(404, "not found");
+  const ext = path.slice(path.lastIndexOf("."));
+  return new Response(request.method === "HEAD" ? null : content[path],
+    { headers: Object.assign({ "Content-Type": TYPES[ext] || "text/plain; charset=utf-8", "Content-Security-Policy": CSP }, SECURITY) });
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     // ROLE=bot: the separate bot endpoint (same code, same KV, outside Cloudflare Access).
     // It serves ONLY the bot routes, guarded by BOT_TOKEN; no app, no owner API, no files.
@@ -221,10 +248,8 @@ export default {
       if (!isBot(request, env)) return fail(401, "unauthorized");
       return botApi(request, env, url);
     }
-    if (url.pathname.startsWith("/api/")) {
-      if (!(await verifyOwner(request, env))) return fail(401, "unauthorized");
-      return ownerApi(request, env, url);
-    }
-    return env.ASSETS.fetch(request);
+    if (!(await verifyOwner(request, env, ctx))) return fail(401, "unauthorized");
+    if (url.pathname.startsWith("/api/")) return ownerApi(request, env, url);
+    return staticFile(request, env, url);
   },
 };

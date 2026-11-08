@@ -74,8 +74,22 @@ test("video request requires the approved image upload, bot can read it", async 
   assert.equal(st.status, "failed"); assert.equal(st.error, "quota reached");
 });
 
-test("static assets are served for non-API paths", async () => {
-  assert.equal(await (await call(mk(), "/index.html")).text(), "asset");
+test("static pages need the owner too, and carry the security headers", async () => {
+  assert.equal((await call(mk(), "/index.html")).status, 401);
+  const r = await owner(mk(), "/index.html");
+  assert.equal(await r.text(), "asset");
+  assert.match(r.headers.get("Content-Security-Policy"), /connect-src 'self'/);
+  assert.equal(r.headers.get("X-Frame-Options"), "DENY");
+});
+
+test("Cloudflare Access workers.dev identity (ctx.access) is accepted only for the owner", async () => {
+  const env = mk();
+  const ctx = email => ({ access: { getIdentity: async () => ({ email }) } });
+  const req = () => new Request("https://studio.test/api/health");
+  assert.equal((await worker.fetch(req(), env, ctx("OWNER@example.com"))).status, 200);
+  assert.equal((await worker.fetch(req(), env, ctx("intruder@example.com"))).status, 401);
+  assert.equal((await worker.fetch(req(), env, { access: { getIdentity: async () => { throw new Error("x"); } } })).status, 401);
+  assert.equal((await worker.fetch(req(), Object.assign(mk(), { OWNER_EMAIL: "" }), ctx("owner@example.com"))).status, 401);
 });
 
 test("bot-role worker serves only bot routes", async () => {
