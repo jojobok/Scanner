@@ -13,11 +13,39 @@ const project = load();
 const SR = window.StudioRequests;
 const GB = window.StudioGrok, MEDIA = window.StudioMedia;
 let objectUrls = []; // previews of files kept on this device; released on every redraw
+// Stores one file as a new version. Returns {entry} or {duplicate} or {error}.
+async function storeFile(file, sceneUidValue, requestId, reason){
+  const kind=GB.fileKind(file);const problem=GB.checkFile(file,null);
+  if(problem)return {error:problem};
+  const hash=await MEDIA.sha256(file);
+  if(hash){const known=project.media.find(m=>m.sha256===hash);if(known)return {duplicate:known};
+    try{const stored=await MEDIA.findBySha(hash);if(stored)return {duplicate:stored}}catch(_){}}
+  const id=MEDIA.newId();
+  await MEDIA.put({id,sceneUid:sceneUidValue,requestId,type:kind,name:file.name,mime:file.type,size:file.size,sha256:hash,blob:file});
+  MEDIA.persist();
+  const entry={id,request_id:requestId||null,scene_uid:sceneUidValue||null,type:kind,name:file.name,mime:file.type,size:file.size,
+    sha256:hash,added_at:new Date().toISOString(),reason:reason||null};
+  project.media.push(entry);
+  return {entry};
+}
+function linkToRequest(entry,scene,req){
+  entry.scene_uid=scene.uid;entry.reason=null;
+  if(req){entry.request_id=req.id;req.status="received";req.file={name:entry.name,mime:entry.mime,size:entry.size,media_id:entry.id,received_at:entry.added_at}}
+  if(entry.type==="I"&&scene.image_status!=="approved")scene.image_status="review";
+  scene.approved=false;
+  MEDIA.setScene(entry.id,scene.uid).catch(()=>{});
+}
 function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 (function migrate(){
   let changed=false;
   if(!project.code){project.code=SR.newProductionCode();changed=true}
   project.scenes.forEach(s=>{if(!s.uid){s.uid=sceneUid();changed=true}if(!Array.isArray(s.requests)){s.requests=[];changed=true}});
+  if(!Array.isArray(project.media)){
+    project.media=[];
+    project.scenes.forEach(s=>s.requests.forEach(r=>{if(r.file)project.media.push({id:r.id,request_id:r.id,scene_uid:s.uid,type:r.type,
+      name:r.file.name,mime:r.file.mime,size:r.file.size,sha256:null,added_at:r.file.received_at||r.created_at,reason:null})}));
+    changed=true;
+  }
   if(changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
 })();
 $("portion").value = project.portion || "";
@@ -47,7 +75,7 @@ function render() {
     const approve = document.createElement("button"); approve.className="primary"; approve.textContent="אשר סצנה";
     approve.addEventListener("click",()=>{scene.approved=true;save();render();});
     const remove = document.createElement("button"); remove.className="secondary"; remove.textContent="מחק סצנה";
-    remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;(scene.requests||[]).forEach(r=>{if(r.file)MEDIA.remove(r.id).catch(()=>{})});project.scenes.splice(index,1);expandedScene=null;save();render();});
+    remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;project.media.filter(m=>m.scene_uid===scene.uid).forEach(m=>{m.scene_uid=null;m.reason="scene_deleted";MEDIA.setScene(m.id,null).catch(()=>{})});project.scenes.splice(index,1);renderIntake();expandedScene=null;save();render();});
     const promptLabel = document.createElement("label"); promptLabel.textContent="פרומפט לתמונה (אנגלית)";
     const promptArea = document.createElement("textarea"); promptArea.value=scene.image_prompt || "";
     promptArea.dir="ltr"; promptArea.style.textAlign="left";
@@ -102,12 +130,13 @@ function render() {
       if(problem){attachStatus.textContent=problem;return}
       let req=[...scene.requests].reverse().find(r=>r.type===kind&&r.status==="waiting");
       if(!req){req={id:SR.makeRequestId(project.code,index+1,kind),type:kind,status:"waiting",created_at:new Date().toISOString(),source:"manual"};scene.requests.push(req)}
-      try{
-        await MEDIA.put({id:req.id,sceneUid:scene.uid,type:kind,name:file.name,mime:file.type,size:file.size,blob:file});MEDIA.persist();
-      }catch(err){attachStatus.textContent="שמירת הקובץ במכשיר נכשלה: "+err.message;return}
-      req.status="received";req.file={name:file.name,mime:file.type,size:file.size,received_at:new Date().toISOString()};
-      if(kind==="I"){scene.image_status="review";imageStatus.value="review"}
-      scene.approved=false;status.textContent="ממתינה לאישור";save();
+      let res;
+      try{res=await storeFile(file,scene.uid,req.id)}catch(err){attachStatus.textContent="שמירת הקובץ במכשיר נכשלה: "+err.message;return}
+      if(res.error){attachStatus.textContent=res.error;return}
+      if(res.duplicate){attachStatus.textContent="הקובץ הזה כבר קיים באולפן ("+res.duplicate.name+"). לא נשמר שוב.";save();return}
+      linkToRequest(res.entry,scene,req);
+      if(kind==="I")imageStatus.value=scene.image_status;
+      status.textContent="ממתינה לאישור";save();
       attachStatus.textContent=(kind==="I"?"התמונה":"הסרטון")+" נשמר במכשיר ושויך לבקשה "+req.id+".";
       showPreview();renderRequests();
     });
@@ -187,14 +216,26 @@ function render() {
       if(imageUrl){const image=document.createElement("img");image.src=imageUrl;image.alt="תצוגת תמונה לסצנה "+(index+1);image.loading="lazy";image.referrerPolicy="no-referrer";preview.append(image)}
       if(videoUrl){const video=document.createElement("video");video.src=videoUrl;video.controls=true;video.preload="none";video.setAttribute("playsinline","");preview.append(video)}
       // files brought back from Grok and kept on this device (latest image and video)
-      const stored=["I","V"].map(t=>[...scene.requests].reverse().find(r=>r.type===t&&r.file)).filter(Boolean);
-      stored.forEach(r=>MEDIA.get(r.id).then(rec=>{
-        if(!rec||!rec.blob||!preview.isConnected)return;
-        const url=URL.createObjectURL(rec.blob);objectUrls.push(url);
-        const el=document.createElement(r.type==="I"?"img":"video");el.src=url;el.dataset.request=r.id;
-        if(r.type==="I")el.alt="תמונה מ־Grok, סצנה "+(index+1)+" ("+r.id+")";else{el.controls=true;el.setAttribute("playsinline","")}
-        preview.querySelectorAll(".no-media").forEach(n=>n.remove());preview.prepend(el);
-      }).catch(()=>{}));
+      const stored=project.media.filter(m=>m.scene_uid===scene.uid).slice().reverse();
+      stored.forEach(m=>{
+        const fig=document.createElement("figure");fig.className="version";fig.dataset.media=m.id;
+        const el=document.createElement(m.type==="I"?"img":"video");
+        if(m.type==="I")el.alt="תמונה מ־Grok, סצנה "+(index+1)+" ("+(m.request_id||m.name)+")";else{el.controls=true;el.setAttribute("playsinline","");el.preload="metadata"}
+        const cap=document.createElement("figcaption");
+        cap.textContent=(m.request_id||m.name)+(scene.approved_media_id===m.id?" · ✓ התמונה המאושרת":"");
+        fig.append(el,cap);
+        if(m.type==="I"&&scene.approved_media_id!==m.id){
+          const pick=document.createElement("button");pick.type="button";pick.className="secondary";pick.textContent="אשר תמונה זו";
+          pick.addEventListener("click",()=>{scene.approved_media_id=m.id;scene.image_status="approved";
+            if(m.request_id)scene.approved_image_request=m.request_id;scene.approved=false;save();render()});
+          fig.append(pick);
+        }
+        preview.append(fig);
+        MEDIA.get(m.id).then(rec=>{
+          if(!rec||!rec.blob||!el.isConnected)return;
+          const url=URL.createObjectURL(rec.blob);objectUrls.push(url);el.src=url;
+        }).catch(()=>{cap.textContent+=" · הקובץ לא נמצא במכשיר"});
+      });
       if(!imageUrl&&!videoUrl&&!stored.length){const note=document.createElement("p");note.className="status no-media";note.textContent="לא צורפה מדיה לסצנה.";preview.append(note)}
     }
     function updateMedia(){
@@ -223,6 +264,48 @@ $("export").addEventListener("click",()=>{
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 render();
+renderIntake();
+
+// ---- bulk import (iOS Files, incl. Google Drive): matched only by a valid request ID
+const REASON={no_id:"אין מזהה תקין בשם הקובץ",other_production:"מזהה של הפקה אחרת",type_mismatch:"סוג הקובץ לא מתאים לבקשה",
+  unknown_request:"המזהה לא נמצא בבקשות של ההפקה",scene_deleted:"הסצנה שלו נמחקה"};
+function renderIntake(){
+  const box=$("intake");if(!box)return;box.replaceChildren();
+  const waiting=project.media.filter(m=>!m.scene_uid);
+  if(!waiting.length){const p=document.createElement("p");p.className="status";p.textContent="אין קבצים שממתינים לשיוך.";box.append(p);return}
+  waiting.forEach(m=>{
+    const row=document.createElement("div");row.className="scene";
+    const name=document.createElement("strong");name.textContent=m.name;name.dir="ltr";
+    const why=document.createElement("p");why.className="status";why.textContent=REASON[m.reason]||"לא שויך";
+    const pickScene=document.createElement("select");pickScene.setAttribute("aria-label","בחר סצנה עבור "+m.name);
+    project.scenes.forEach((s,i)=>{const o=document.createElement("option");o.value=s.uid;o.textContent="סצנה "+(i+1);pickScene.append(o)});
+    const assign=document.createElement("button");assign.type="button";assign.className="primary";assign.textContent="שייך לסצנה";
+    assign.disabled=!project.scenes.length;
+    assign.addEventListener("click",()=>{const s=project.scenes.find(x=>x.uid===pickScene.value);if(!s)return;
+      const req=m.request_id&&s.requests.find(r=>r.id===m.request_id);linkToRequest(m,s,req);save();render();renderIntake()});
+    const acts=document.createElement("div");acts.className="actions";acts.append(pickScene,assign);
+    row.append(name,why,acts);box.append(row);
+  });
+}
+$("importPick").addEventListener("click",()=>$("importFiles").click());
+$("importFiles").addEventListener("change",async e=>{
+  const files=[...e.target.files];e.target.value="";
+  if(!files.length)return;
+  const out=$("importStatus");out.textContent="מייבא "+files.length+" קבצים...";
+  let auto=0,waiting=0,dup=0;const failed=[];
+  for(const f of files){
+    try{
+      const match=SR.matchFile(project,f.name,f.type);
+      const res=await storeFile(f,null,match.parsed?match.parsed.id:null,match.reason);
+      if(res.error){failed.push(f.name+": "+res.error);continue}
+      if(res.duplicate){dup++;continue}
+      if(match.request){linkToRequest(res.entry,project.scenes[match.sceneIndex],match.request);auto++}else waiting++;
+      save();
+    }catch(err){failed.push(f.name+": "+err.message)}
+  }
+  out.textContent="שויכו אוטומטית: "+auto+" · ממתינים לשיוך: "+waiting+(dup?" · כבר קיימים: "+dup:"")+(failed.length?" · נכשלו: "+failed.join("; "):"");
+  render();renderIntake();
+});
 
 $("demo").addEventListener("click", () => {
   const button = $("demo");

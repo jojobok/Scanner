@@ -121,8 +121,27 @@
     ].join("\n");
   }
 
+  // Matches an imported file to a scene by the request ID in its name.
+  // Returns {sceneIndex, request, parsed} on a certain match, otherwise
+  // {reason, parsed?}; anything not certain goes to the manual intake box.
+  function matchFile(project, filename, mime) {
+    const parsed = parseRequestId(filename);
+    if (!parsed) return { reason: "no_id" };
+    if (project.code && parsed.production !== project.code) return { reason: "other_production", parsed };
+    const kind = String(mime || "").split("/")[0];
+    if ((parsed.type === "I" && kind && kind !== "image") || (parsed.type === "V" && kind && kind !== "video")) {
+      return { reason: "type_mismatch", parsed };
+    }
+    const scenes = project.scenes || [];
+    for (let i = 0; i < scenes.length; i++) {
+      const req = (scenes[i].requests || []).find(r => r.id === parsed.id);
+      if (req) return { sceneIndex: i, request: req, parsed };
+    }
+    return { reason: "unknown_request", parsed };
+  }
+
   const api = { ALPHABET, DEFAULT_FOLDER, STYLE_RULES, VIDEO_RULES, checkChar, newProductionCode,
-                makeRequestId, parseRequestId, imagePackage, videoPackage };
+                makeRequestId, parseRequestId, imagePackage, videoPackage, matchFile };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.StudioRequests = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

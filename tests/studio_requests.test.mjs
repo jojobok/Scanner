@@ -67,3 +67,17 @@ test("video package uses the approved image as first frame and continuity rules"
     assert.ok(text.includes(part), part);
   }
 });
+test("matchFile assigns by request id and sends anything uncertain to intake", () => {
+  const img = "TS-K7QM-02-I-ABC" + SR.checkChar("K7QM", "I", "ABC");
+  const vid = "TS-K7QM-02-V-DEF" + SR.checkChar("K7QM", "V", "DEF");
+  const project = { code: "K7QM", scenes: [{ requests: [] }, { requests: [{ id: img, type: "I" }, { id: vid, type: "V" }] }] };
+  const m = SR.matchFile(project, img + ".jpg", "image/jpeg");
+  assert.equal(m.sceneIndex, 1); assert.equal(m.request.id, img);
+  assert.equal(SR.matchFile(project, vid + ".mp4", "video/mp4").sceneIndex, 1);
+  assert.equal(SR.matchFile(project, "IMG_0001.jpg", "image/jpeg").reason, "no_id");
+  assert.equal(SR.matchFile(project, img + ".mp4", "video/mp4").reason, "type_mismatch");
+  const other = "TS-ZZZZ-02-I-ABC" + SR.checkChar("ZZZZ", "I", "ABC");
+  assert.equal(SR.matchFile(project, other + ".jpg", "image/jpeg").reason, "other_production");
+  const unknown = "TS-K7QM-02-I-XYZ" + SR.checkChar("K7QM", "I", "XYZ");
+  assert.equal(SR.matchFile(project, unknown + ".jpg", "image/jpeg").reason, "unknown_request");
+});

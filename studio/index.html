@@ -24,6 +24,7 @@
     .media-preview{margin-top:12px;display:grid;gap:10px}.media-preview img,.media-preview video{width:100%;max-height:460px;object-fit:contain;border-radius:10px;background:#0d1728}.notice{border-right:3px solid #bca475;padding:8px 12px;color:#d9e2ed;font-size:.88rem}
     .button-link{display:inline-block;text-decoration:none;border-radius:10px;padding:12px 16px;margin-top:10px}.file-button{display:inline-block;margin:0;padding:12px 16px;border-radius:10px;cursor:pointer;color:#fff}
     .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}a:focus-visible,button:focus-visible,label:focus-within{outline:2px solid #bca475;outline-offset:2px}
+    .version{margin:0}.version figcaption{font-size:.78rem;color:#b9c6d7;margin:4px 0;direction:ltr;text-align:right}
     [hidden]{display:none!important}
   </style>
 </head>
@@ -37,6 +38,9 @@
     <div class="actions"><button id="demo" class="secondary">צור תסריט הדגמה</button><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
   </section>
   <section class="panel"><h2>לוח סצנות</h2><p class="notice">תסריט הדגמה בלבד, המבוסס על תבנית הבדיקה של Scanner. אינו תסריט תורני מאומת. יצירה ב־Grok נעשית בדפדפן, בחשבון הקיים שלך, בלי API בתשלום: "צור תמונה" מכין פרומפט, "העתק ופתח ב־Grok" מעתיק אותו ופותח את Grok, ואת התוצר מצרפים בחזרה ב"צרף תוצר מ־Grok". האולפן לא נכנס לחשבון Grok, לא שומר פרטי התחברות ולא מפעיל את Grok אוטומטית. טיוטות וקבצים נשמרים במכשיר זה בלבד. (אפשר עדיין להשתמש בהוראה ל־Grok Bot.)</p><div id="scenes"></div></section>
+  <section class="panel"><h2>קליטת תוצרים</h2><p class="notice">ייבוא מרוכז: בחר את הקבצים ש־Grok Bot שמר בתיקיית Studio-Intake (באפליקציית Files ← Google Drive) או קבצים מהמכשיר. קובץ עם מזהה בקשה תקין משויך לסצנה שלו אוטומטית; כל השאר ממתינים כאן לשיוך ידני. כל קובץ נשמר כגרסה נפרדת, וקבצים זהים לא נשמרים פעמיים.</p>
+    <div class="actions"><button id="importPick" class="primary" type="button">ייבא קבצים</button><input id="importFiles" type="file" accept="image/*,video/*" multiple hidden></div>
+    <p id="importStatus" class="status" role="status"></p><div id="intake"></div></section>
 </main>
 <script src="./requests.js" defer></script>
 <script src="./grok.js" defer></script>
