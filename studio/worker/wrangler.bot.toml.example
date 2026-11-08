@@ -2,6 +2,7 @@
 name = "scanner-studio-bot"
 main = "index.js"
 compatibility_date = "2026-11-01"
+keep_vars = true          # do not wipe variables already set in the dashboard
 workers_dev = true
 
 [[kv_namespaces]]
