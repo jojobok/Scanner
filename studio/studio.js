@@ -10,6 +10,14 @@ function load() {
   return emptyProject();
 }
 const project = load();
+const SR = window.StudioRequests;
+function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+(function migrate(){
+  let changed=false;
+  if(!project.code){project.code=SR.newProductionCode();changed=true}
+  project.scenes.forEach(s=>{if(!s.uid){s.uid=sceneUid();changed=true}if(!Array.isArray(s.requests)){s.requests=[];changed=true}});
+  if(changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+})();
 $("portion").value = project.portion || "";
 $("title").value = project.title || "";
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(project)); }
@@ -57,16 +65,65 @@ function render() {
     });
     const generationTitle=document.createElement("strong");generationTitle.textContent="יצירת תמונה";
     const generationStatus=document.createElement("p");generationStatus.className="status";
-    generationStatus.textContent="מנוע תמונות: לא מחובר. אין חיובים.";
+    generationStatus.textContent="נוצר ב־Grok Bot במנוי שלך ונשמר בתיקיית "+SR.DEFAULT_FOLDER+" ב־Google Drive. האולפן לא מתחבר לחשבון Grok ואין חיובים.";
+    if(!Array.isArray(scene.requests)) scene.requests=[];
+    const latest=type=>[...scene.requests].reverse().find(r=>r.type===type);
     const generateButton=document.createElement("button");generateButton.type="button";generateButton.className="primary";generateButton.textContent="צור תמונה";
+    const videoButton=document.createElement("button");videoButton.type="button";videoButton.className="secondary";videoButton.textContent="צור סרטון מהתמונה";
+    const packageArea=document.createElement("textarea");packageArea.readOnly=true;packageArea.dir="ltr";packageArea.style.textAlign="left";packageArea.hidden=true;
+    packageArea.setAttribute("aria-label","הוראה ל־Grok Bot");
+    const copyPackage=document.createElement("button");copyPackage.type="button";copyPackage.className="secondary";copyPackage.textContent="העתק הוראה ל־Grok Bot";copyPackage.hidden=true;
+    const requestList=document.createElement("ul");requestList.className="requests";
+    const STATUS_TEXT={waiting:"ממתינה לתוצר מ־Grok Bot",received:"התקבל תוצר",superseded:"הוחלפה בבקשה חדשה"};
+    function renderRequests(){
+      requestList.replaceChildren();
+      scene.requests.slice(-4).reverse().forEach(r=>{
+        const li=document.createElement("li");
+        const code=document.createElement("code");code.textContent=r.id;
+        li.append(code," · ",(r.type==="V"?"סרטון":"תמונה")," · ",STATUS_TEXT[r.status]||r.status);
+        requestList.append(li);
+      });
+      const img=latest("I");
+      videoButton.disabled=!(scene.image_status==="approved"&&scene.approved_image_request);
+      videoButton.title=videoButton.disabled?"קודם יש לאשר תמונה":"";
+      generationStatus.textContent=img&&img.status==="waiting"
+        ?"בקשה "+img.id+" ממתינה. העתק את ההוראה ל־Grok Bot. הקובץ יישמר בשם הזה בתיקייה "+SR.DEFAULT_FOLDER+"."
+        :"נוצר ב־Grok Bot במנוי שלך ונשמר בתיקיית "+SR.DEFAULT_FOLDER+" ב־Google Drive. האולפן לא מתחבר לחשבון Grok ואין חיובים.";
+    }
+    function addRequest(type,text,extra){
+      scene.requests.filter(r=>r.type===type&&r.status==="waiting").forEach(r=>{r.status="superseded"});
+      const id=SR.makeRequestId(project.code,index+1,type);
+      const req=Object.assign({id,type,status:"waiting",created_at:new Date().toISOString()},extra||{});
+      req.package=text(id);
+      scene.requests.push(req);save();
+      packageArea.value=req.package;packageArea.hidden=false;copyPackage.hidden=false;copyPackage.textContent="העתק הוראה ל־Grok Bot";
+      renderRequests();
+    }
     generateButton.addEventListener("click",()=>{
-      alert("יצירת תמונות אוטומטית עדיין לא מחוברת. הפרומפט מוכן, אך נדרש חיבור מאובטח לספק תמונות AI לפני הפעלת הכפתור. לא בוצע חיוב.");
+      const scenePrompt=(scene.image_prompt||"").trim();
+      if(!scenePrompt){alert("יש למלא קודם פרומפט לתמונה");return}
+      const prev=latest("I");
+      const revision=scene.image_status==="revision"?(scene.image_revision||""):"";
+      addRequest("I",id=>SR.imagePackage({id,prompt:scenePrompt,revision,previousId:prev&&prev.id}),{prompt:scenePrompt,revision});
+      if(scene.image_status!=="revision"){scene.image_status="not_started"}
+      save();
+    });
+    videoButton.addEventListener("click",()=>{
+      if(videoButton.disabled){alert("יש לאשר קודם תמונה לסצנה");return}
+      const motion=prompt("תנועת מצלמה לסרטון (באנגלית):","Slow cinematic push-in.");
+      if(motion===null)return;
+      addRequest("V",id=>SR.videoPackage({id,sourceId:scene.approved_image_request,motion}),{source:scene.approved_image_request,motion});
+    });
+    copyPackage.addEventListener("click",async()=>{
+      try{await navigator.clipboard.writeText(packageArea.value);copyPackage.textContent="הועתק"}catch(_){packageArea.focus();packageArea.select();alert("סמן והעתק את ההוראה ידנית")}
     });
     const imageStatusLabel=document.createElement("label");imageStatusLabel.textContent="מצב תמונה";
     const imageStatus=document.createElement("select");
     [["not_started","טרם נוצרה"],["review","ממתינה לבדיקה"],["approved","תמונה אושרה"],["revision","נדרש תיקון"]].forEach(([value,title])=>{const option=document.createElement("option");option.value=value;option.textContent=title;imageStatus.append(option)});
     imageStatus.value=scene.image_status||"not_started";
-    imageStatus.addEventListener("change",()=>{scene.image_status=imageStatus.value;scene.approved=false;status.textContent="ממתינה לאישור";save()});
+    imageStatus.addEventListener("change",()=>{scene.image_status=imageStatus.value;
+      if(imageStatus.value==="approved"){const r=latest("I");scene.approved_image_request=r?r.id:(scene.approved_image_request||null)}
+      scene.approved=false;status.textContent="ממתינה לאישור";save();renderRequests()});
     const revisionLabel=document.createElement("label");revisionLabel.textContent="הערות לתיקון תמונה";
     const revisionArea=document.createElement("textarea");revisionArea.value=scene.image_revision||"";
     revisionArea.placeholder="מה לשנות בתמונה?";
@@ -88,16 +145,24 @@ function render() {
       if(videoUrl){const video=document.createElement("video");video.src=videoUrl;video.controls=true;video.preload="none";video.setAttribute("playsinline","");preview.append(video)}
       if(!imageUrl&&!videoUrl){const note=document.createElement("p");note.className="status";note.textContent="לא צורפה מדיה לסצנה.";preview.append(note)}
     }
-    function updateMedia(){scene.image_url=imageInput.value.trim();scene.video_url=videoInput.value.trim();scene.approved=false;status.textContent="ממתינה לאישור";save();showPreview()}
+    function updateMedia(){
+      const hadImage=scene.image_url,hadVideo=scene.video_url;
+      scene.image_url=imageInput.value.trim();scene.video_url=videoInput.value.trim();
+      const mark=type=>{const r=latest(type);if(r&&r.status==="waiting"){r.status="received";if(type==="I"){scene.image_status="review";imageStatus.value="review"}}};
+      if(scene.image_url&&scene.image_url!==hadImage)mark("I");
+      if(scene.video_url&&scene.video_url!==hadVideo)mark("V");
+      scene.approved=false;status.textContent="ממתינה לאישור";save();showPreview();renderRequests()}
     imageInput.addEventListener("change",updateMedia);videoInput.addEventListener("change",updateMedia);
     showPreview();
     actions.append(approve,remove);
     const details=document.createElement("div");details.hidden=expandedScene!==index;
-    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,generateButton,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
+    renderRequests();
+    const genActions=document.createElement("div");genActions.className="actions";genActions.append(generateButton,videoButton);
+    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,genActions,packageArea,copyPackage,requestList,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
     card.append(heading,status,details);root.append(card);
   });
 }
-$("add").addEventListener("click",()=>{project.scenes.push({narration:"",image_prompt:"",approved:false});expandedScene=project.scenes.length-1;save();render();});
+$("add").addEventListener("click",()=>{project.scenes.push({uid:sceneUid(),narration:"",image_prompt:"",approved:false,requests:[]});expandedScene=project.scenes.length-1;save();render();});
 $("export").addEventListener("click",()=>{
   const blob = new Blob([JSON.stringify(project,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
@@ -124,7 +189,7 @@ $("demo").addEventListener("click", () => {
         ["אבל כל צעד קטן יכול לפתוח דרך חדשה.", "Sandaled feet walking along an ancient stone path, vertical 9:16"],
         ["חשוב לזכור את הכוח של מעשה טוב.", "Warm sunbeams across ancient Judean hills, vertical 9:16"],
         ["שבת שלום. זהו תסריט הדגמה בלבד, לא תוכן תורני מאומת.", "Quiet ancient landscape at golden hour, vertical 9:16"]
-      ].map(([narration,image_prompt]) => ({narration,image_prompt,approved:false}))
+      ].map(([narration,image_prompt]) => ({uid:sceneUid(),narration,image_prompt,approved:false,requests:[]}))
     };
     if (project.scenes.length) localStorage.setItem("scanner-studio-backup-" + Date.now(), JSON.stringify(project));
     project.portion = result.parasha;
