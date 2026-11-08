@@ -77,3 +77,11 @@ test("video request requires the approved image upload, bot can read it", async 
 test("static assets are served for non-API paths", async () => {
   assert.equal(await (await call(mk(), "/index.html")).text(), "asset");
 });
+
+test("bot-role worker serves only bot routes", async () => {
+  const env = Object.assign(mk(), { ROLE: "bot" });
+  assert.equal((await call(env, "/index.html")).status, 404);
+  assert.equal((await owner(env, "/api/health")).status, 404);
+  assert.equal((await bot(env, "/api/bot/next")).status, 200);
+  assert.equal((await call(env, "/api/bot/next")).status, 401);
+});

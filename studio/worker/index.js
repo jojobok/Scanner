@@ -10,7 +10,8 @@
 // team's JWKS, audience checked). Bot routes require the BOT_TOKEN bearer secret (and, in front
 // of the Worker, a Cloudflare Access service token). Nothing works if auth is not configured.
 //
-// Bindings: KV namespace STUDIO, static assets ASSETS.
+// Bindings: KV namespace STUDIO, static assets ASSETS (not on the bot worker).
+// Deployed twice: the app (behind Access) and ROLE="bot" (bot routes only, BOT_TOKEN).
 // Vars/secrets: ACCESS_TEAM_DOMAIN, ACCESS_AUD, OWNER_EMAIL, BOT_TOKEN.
 import "../requests.js";
 const SR = globalThis.StudioRequests;
@@ -213,6 +214,9 @@ async function botApi(request, env, url) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // ROLE=bot: the separate bot endpoint (same code, same KV, outside Cloudflare Access).
+    // It serves ONLY the bot routes, guarded by BOT_TOKEN; no app, no owner API, no files.
+    if (env.ROLE === "bot" && !url.pathname.startsWith("/api/bot/")) return fail(404, "not found");
     if (url.pathname.startsWith("/api/bot/")) {
       if (!isBot(request, env)) return fail(401, "unauthorized");
       return botApi(request, env, url);
