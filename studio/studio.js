@@ -43,6 +43,18 @@ function render() {
     promptArea.setAttribute("aria-label","פרומפט לתמונה סצנה " + (index + 1));
     promptArea.placeholder="Cinematic biblical scene, vertical 9:16...";
     promptArea.addEventListener("input",()=>{scene.image_prompt=promptArea.value;scene.approved=false;status.textContent="ממתינה לאישור";save();});
+    const prepare=document.createElement("button");prepare.type="button";prepare.className="secondary";prepare.textContent="הכן פרומפט קולנועי";
+    const prepared=document.createElement("textarea");prepared.readOnly=true;prepared.dir="ltr";prepared.style.textAlign="left";prepared.hidden=true;
+    const copyPrompt=document.createElement("button");copyPrompt.type="button";copyPrompt.className="secondary";copyPrompt.textContent="העתק פרומפט";copyPrompt.hidden=true;
+    prepare.addEventListener("click",()=>{
+      const scenePrompt=(scene.image_prompt||"").trim();
+      if(!scenePrompt){alert("יש למלא קודם פרומפט לתמונה");return}
+      prepared.value=[scenePrompt,"Ultra-realistic professional cinematic biblical scene, vertical 9:16, natural lighting, authentic ancient Middle Eastern setting, historically plausible clothing and architecture, modest attire, consistent character appearance, realistic anatomy and proportions, detailed environment, no modern objects, no text, no logos, no watermarks, no split screen, no collage, no fantasy effects."].join("\\n\\n").replace(/\\n/g,"\n");
+      prepared.hidden=false;copyPrompt.hidden=false;
+    });
+    copyPrompt.addEventListener("click",async()=>{
+      try{await navigator.clipboard.writeText(prepared.value);copyPrompt.textContent="הועתק"}catch(_){prepared.focus();prepared.select();alert("סמן והעתק את הפרומפט ידנית")}
+    });
     const mediaTitle=document.createElement("strong");mediaTitle.textContent="מדיה לסצנה";
     const mediaNote=document.createElement("p");mediaNote.className="status";mediaNote.textContent="קישורים לתצוגה בלבד. לא מתבצעת יצירת תמונה או וידאו.";
     const imageLabel=document.createElement("label");imageLabel.textContent="קישור לתמונה (HTTPS)";
@@ -65,7 +77,7 @@ function render() {
     showPreview();
     actions.append(approve,remove);
     const details=document.createElement("div");details.hidden=expandedScene!==index;
-    details.append(label,area,promptLabel,promptArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
+    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
     card.append(heading,status,details);root.append(card);
   });
 }
