@@ -35,10 +35,16 @@ function render() {
     approve.addEventListener("click",()=>{scene.approved=true;save();render();});
     const remove = document.createElement("button"); remove.className="secondary"; remove.textContent="מחק סצנה";
     remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;project.scenes.splice(index,1);save();render();});
-    actions.append(approve,remove);card.append(heading,status,label,area,actions);root.append(card);
+    const promptLabel = document.createElement("label"); promptLabel.textContent="פרומפט לתמונה (אנגלית)";
+    const promptArea = document.createElement("textarea"); promptArea.value=scene.image_prompt || "";
+    promptArea.dir="ltr"; promptArea.style.textAlign="left";
+    promptArea.setAttribute("aria-label","פרומפט לתמונה סצנה " + (index + 1));
+    promptArea.placeholder="Cinematic biblical scene, vertical 9:16...";
+    promptArea.addEventListener("input",()=>{scene.image_prompt=promptArea.value;scene.approved=false;status.textContent="ממתינה לאישור";save();});
+    actions.append(approve,remove);card.append(heading,status,label,area,promptLabel,promptArea,actions);root.append(card);
   });
 }
-$("add").addEventListener("click",()=>{project.scenes.push({narration:"",approved:false});save();render();});
+$("add").addEventListener("click",()=>{project.scenes.push({narration:"",image_prompt:"",approved:false});save();render();});
 $("export").addEventListener("click",()=>{
   const blob = new Blob([JSON.stringify(project,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
