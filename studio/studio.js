@@ -11,6 +11,8 @@ function load() {
 }
 const project = load();
 const SR = window.StudioRequests;
+const GB = window.StudioGrok, MEDIA = window.StudioMedia;
+let objectUrls = []; // previews of files kept on this device; released on every redraw
 function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 (function migrate(){
   let changed=false;
@@ -26,6 +28,7 @@ for (const id of ["portion","title"]) {
 }
 let expandedScene = null;
 function render() {
+  objectUrls.forEach(u=>URL.revokeObjectURL(u)); objectUrls=[];
   const root = $("scenes");
   root.replaceChildren();
   if (!project.scenes.length) {
@@ -44,7 +47,7 @@ function render() {
     const approve = document.createElement("button"); approve.className="primary"; approve.textContent="אשר סצנה";
     approve.addEventListener("click",()=>{scene.approved=true;save();render();});
     const remove = document.createElement("button"); remove.className="secondary"; remove.textContent="מחק סצנה";
-    remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;project.scenes.splice(index,1);expandedScene=null;save();render();});
+    remove.addEventListener("click",()=>{if(!confirm("למחוק את הסצנה מהטיוטה המקומית?"))return;(scene.requests||[]).forEach(r=>{if(r.file)MEDIA.remove(r.id).catch(()=>{})});project.scenes.splice(index,1);expandedScene=null;save();render();});
     const promptLabel = document.createElement("label"); promptLabel.textContent="פרומפט לתמונה (אנגלית)";
     const promptArea = document.createElement("textarea"); promptArea.value=scene.image_prompt || "";
     promptArea.dir="ltr"; promptArea.style.textAlign="left";
@@ -72,6 +75,42 @@ function render() {
     const videoButton=document.createElement("button");videoButton.type="button";videoButton.className="secondary";videoButton.textContent="צור סרטון מהתמונה";
     const packageArea=document.createElement("textarea");packageArea.readOnly=true;packageArea.dir="ltr";packageArea.style.textAlign="left";packageArea.hidden=true;
     packageArea.setAttribute("aria-label","הוראה ל־Grok Bot");
+    // browser handoff: copy the prompt and open Grok, where the user is already signed in
+    const grokTitle=document.createElement("strong");grokTitle.textContent="דרך Grok בדפדפן (החשבון הקיים שלך)";grokTitle.hidden=true;
+    const grokText=document.createElement("textarea");grokText.readOnly=true;grokText.dir="ltr";grokText.style.textAlign="left";grokText.hidden=true;
+    grokText.setAttribute("aria-label","פרומפט להדבקה ב־Grok");
+    const openGrok=document.createElement("a");openGrok.className="primary button-link";openGrok.href=GB.IMAGINE_URL;openGrok.target="_blank";openGrok.rel="noopener noreferrer";openGrok.textContent="העתק ופתח ב־Grok";openGrok.hidden=true;
+    const grokHint=document.createElement("p");grokHint.className="status";grokHint.hidden=true;
+    grokHint.textContent="הפרומפט מועתק ו־Grok נפתח בלשונית חדשה. מדביקים, יוצרים, שומרים את הקובץ במכשיר, וחוזרים לכאן ל\"צרף תוצר מ־Grok\".";
+    openGrok.addEventListener("click",()=>{
+      try{navigator.clipboard.writeText(grokText.value).then(()=>{openGrok.textContent="הועתק – הדבק ב־Grok"},()=>{grokText.focus();grokText.select()})}catch(_){grokText.focus();grokText.select()}
+    });
+    function showGrok(req){
+      const show=!!(req&&req.grok);
+      grokTitle.hidden=grokText.hidden=openGrok.hidden=grokHint.hidden=!show;
+      if(show){grokText.value=req.grok;openGrok.textContent="העתק ופתח ב־Grok"}
+    }
+    // bring the result back: stored on this device only, linked to the scene and request
+    const attachLabel=document.createElement("label");attachLabel.className="secondary file-button";attachLabel.textContent="צרף תוצר מ־Grok";
+    const attachInput=document.createElement("input");attachInput.type="file";attachInput.accept="image/*,video/*";attachInput.className="visually-hidden";
+    attachInput.setAttribute("aria-label","צרף תמונה או סרטון שנוצרו ב־Grok, סצנה "+(index+1));attachLabel.append(attachInput);
+    const attachStatus=document.createElement("p");attachStatus.className="status";attachStatus.setAttribute("role","status");
+    attachInput.addEventListener("change",async()=>{
+      const file=attachInput.files&&attachInput.files[0];attachInput.value="";
+      if(!file)return;
+      const kind=GB.fileKind(file);const problem=GB.checkFile(file,null);
+      if(problem){attachStatus.textContent=problem;return}
+      let req=[...scene.requests].reverse().find(r=>r.type===kind&&r.status==="waiting");
+      if(!req){req={id:SR.makeRequestId(project.code,index+1,kind),type:kind,status:"waiting",created_at:new Date().toISOString(),source:"manual"};scene.requests.push(req)}
+      try{
+        await MEDIA.put({id:req.id,sceneUid:scene.uid,type:kind,name:file.name,mime:file.type,size:file.size,blob:file});MEDIA.persist();
+      }catch(err){attachStatus.textContent="שמירת הקובץ במכשיר נכשלה: "+err.message;return}
+      req.status="received";req.file={name:file.name,mime:file.type,size:file.size,received_at:new Date().toISOString()};
+      if(kind==="I"){scene.image_status="review";imageStatus.value="review"}
+      scene.approved=false;status.textContent="ממתינה לאישור";save();
+      attachStatus.textContent=(kind==="I"?"התמונה":"הסרטון")+" נשמר במכשיר ושויך לבקשה "+req.id+".";
+      showPreview();renderRequests();
+    });
     const copyPackage=document.createElement("button");copyPackage.type="button";copyPackage.className="secondary";copyPackage.textContent="העתק הוראה ל־Grok Bot";copyPackage.hidden=true;
     const requestList=document.createElement("ul");requestList.className="requests";
     const STATUS_TEXT={waiting:"ממתינה לתוצר מ־Grok Bot",received:"התקבל תוצר",superseded:"הוחלפה בבקשה חדשה"};
@@ -89,6 +128,9 @@ function render() {
       generationStatus.textContent=img&&img.status==="waiting"
         ?"בקשה "+img.id+" ממתינה. העתק את ההוראה ל־Grok Bot. הקובץ יישמר בשם הזה בתיקייה "+SR.DEFAULT_FOLDER+"."
         :"נוצר ב־Grok Bot במנוי שלך ונשמר בתיקיית "+SR.DEFAULT_FOLDER+" ב־Google Drive. האולפן לא מתחבר לחשבון Grok ואין חיובים.";
+      if(img&&img.status==="waiting")generationStatus.textContent="בקשה "+img.id+" ממתינה. \"העתק ופתח ב־Grok\" ליצירה בחשבון שלך, ואז \"צרף תוצר מ־Grok\".";
+      const open=[...scene.requests].reverse().find(r=>r.status==="waiting"&&r.grok);
+      showGrok(open);
     }
     function addRequest(type,text,extra){
       scene.requests.filter(r=>r.type===type&&r.status==="waiting").forEach(r=>{r.status="superseded"});
@@ -97,6 +139,7 @@ function render() {
       req.package=text(id);
       scene.requests.push(req);save();
       packageArea.value=req.package;packageArea.hidden=false;copyPackage.hidden=false;copyPackage.textContent="העתק הוראה ל־Grok Bot";
+      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision}):GB.videoPrompt({motion:req.motion});save();showGrok(req);
       renderRequests();
     }
     generateButton.addEventListener("click",()=>{
@@ -143,7 +186,16 @@ function render() {
       const imageUrl=safeUrl(imageInput.value.trim()),videoUrl=safeUrl(videoInput.value.trim());
       if(imageUrl){const image=document.createElement("img");image.src=imageUrl;image.alt="תצוגת תמונה לסצנה "+(index+1);image.loading="lazy";image.referrerPolicy="no-referrer";preview.append(image)}
       if(videoUrl){const video=document.createElement("video");video.src=videoUrl;video.controls=true;video.preload="none";video.setAttribute("playsinline","");preview.append(video)}
-      if(!imageUrl&&!videoUrl){const note=document.createElement("p");note.className="status";note.textContent="לא צורפה מדיה לסצנה.";preview.append(note)}
+      // files brought back from Grok and kept on this device (latest image and video)
+      const stored=["I","V"].map(t=>[...scene.requests].reverse().find(r=>r.type===t&&r.file)).filter(Boolean);
+      stored.forEach(r=>MEDIA.get(r.id).then(rec=>{
+        if(!rec||!rec.blob||!preview.isConnected)return;
+        const url=URL.createObjectURL(rec.blob);objectUrls.push(url);
+        const el=document.createElement(r.type==="I"?"img":"video");el.src=url;el.dataset.request=r.id;
+        if(r.type==="I")el.alt="תמונה מ־Grok, סצנה "+(index+1)+" ("+r.id+")";else{el.controls=true;el.setAttribute("playsinline","")}
+        preview.querySelectorAll(".no-media").forEach(n=>n.remove());preview.prepend(el);
+      }).catch(()=>{}));
+      if(!imageUrl&&!videoUrl&&!stored.length){const note=document.createElement("p");note.className="status no-media";note.textContent="לא צורפה מדיה לסצנה.";preview.append(note)}
     }
     function updateMedia(){
       const hadImage=scene.image_url,hadVideo=scene.video_url;
@@ -158,7 +210,8 @@ function render() {
     const details=document.createElement("div");details.hidden=expandedScene!==index;
     renderRequests();
     const genActions=document.createElement("div");genActions.className="actions";genActions.append(generateButton,videoButton);
-    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,genActions,packageArea,copyPackage,requestList,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
+    const attachRow=document.createElement("div");attachRow.className="actions";attachRow.append(attachLabel);
+    details.append(label,area,promptLabel,promptArea,prepare,prepared,copyPrompt,generationTitle,generationStatus,genActions,grokTitle,grokText,openGrok,grokHint,attachRow,attachStatus,packageArea,copyPackage,requestList,imageStatusLabel,imageStatus,revisionLabel,revisionArea,mediaTitle,mediaNote,imageLabel,imageInput,videoLabel,videoInput,preview,actions);
     card.append(heading,status,details);root.append(card);
   });
 }

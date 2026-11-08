@@ -52,6 +52,9 @@ class Handler(BaseHTTPRequestHandler):
             path = "/index.html"
         allowed = {"/index.html": "text/html; charset=utf-8",
                    "/studio.js": "text/javascript; charset=utf-8",
+                   "/requests.js": "text/javascript; charset=utf-8",
+                   "/grok.js": "text/javascript; charset=utf-8",
+                   "/media.js": "text/javascript; charset=utf-8",
                    "/manifest.webmanifest": "application/manifest+json"}
         if path not in allowed:
             return self.send_error(404)

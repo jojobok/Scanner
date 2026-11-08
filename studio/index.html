@@ -22,6 +22,8 @@
     .scene strong{display:block;margin-bottom:5px}.scene-toggle{display:block;width:100%;padding:6px 0;text-align:right;background:transparent;color:#fff;font-weight:700;font-size:1rem}.status{font-size:.82rem;color:#b9c6d7;margin:6px 0 0}
     .requests{margin:8px 0 0;padding-inline-start:18px;font-size:.8rem;color:#b9c6d7}.requests code{direction:ltr;unicode-bidi:isolate}button:disabled{opacity:.45;cursor:not-allowed}
     .media-preview{margin-top:12px;display:grid;gap:10px}.media-preview img,.media-preview video{width:100%;max-height:460px;object-fit:contain;border-radius:10px;background:#0d1728}.notice{border-right:3px solid #bca475;padding:8px 12px;color:#d9e2ed;font-size:.88rem}
+    .button-link{display:inline-block;text-decoration:none;border-radius:10px;padding:12px 16px;margin-top:10px}.file-button{display:inline-block;margin:0;padding:12px 16px;border-radius:10px;cursor:pointer;color:#fff}
+    .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}a:focus-visible,button:focus-visible,label:focus-within{outline:2px solid #bca475;outline-offset:2px}
     [hidden]{display:none!important}
   </style>
 </head>
@@ -34,9 +36,11 @@
     <label for="title">שם הסרטון</label><input id="title" placeholder="כותרת ההפקה" autocomplete="off">
     <div class="actions"><button id="demo" class="secondary">צור תסריט הדגמה</button><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
   </section>
-  <section class="panel"><h2>לוח סצנות</h2><p class="notice">תסריט הדגמה בלבד, המבוסס על תבנית הבדיקה של Scanner. אינו תסריט תורני מאומת. האולפן לא מתחבר לחשבון Grok: "צור תמונה" מכין הוראה עם מזהה ייחודי ל־Grok Bot, שיוצר במנוי שלך ושומר לתיקיית Studio-Intake ב־Google Drive. טיוטות נשמרות במכשיר זה בלבד.</p><div id="scenes"></div></section>
+  <section class="panel"><h2>לוח סצנות</h2><p class="notice">תסריט הדגמה בלבד, המבוסס על תבנית הבדיקה של Scanner. אינו תסריט תורני מאומת. יצירה ב־Grok נעשית בדפדפן, בחשבון הקיים שלך, בלי API בתשלום: "צור תמונה" מכין פרומפט, "העתק ופתח ב־Grok" מעתיק אותו ופותח את Grok, ואת התוצר מצרפים בחזרה ב"צרף תוצר מ־Grok". האולפן לא נכנס לחשבון Grok, לא שומר פרטי התחברות ולא מפעיל את Grok אוטומטית. טיוטות וקבצים נשמרים במכשיר זה בלבד. (אפשר עדיין להשתמש בהוראה ל־Grok Bot.)</p><div id="scenes"></div></section>
 </main>
 <script src="./requests.js" defer></script>
+<script src="./grok.js" defer></script>
+<script src="./media.js" defer></script>
 <script src="./studio.js" defer></script>
 </body>
 </html>
