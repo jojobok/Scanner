@@ -29,7 +29,9 @@
     "Never depict God in any form: no divine figure, no face in the sky, no body, no hand from the sky, no human-shaped light. Divine presence only as soft natural light, sun rays through clouds, a pillar of cloud or natural controlled fire. No portals, energy beams, lasers, sci-fi or exaggerated fantasy effects.",
     "Not in the style of Western religious paintings; no halos, crosses or Christian iconography.",
     "No modern objects, clothing, tools or buildings (no modern shirts or trousers, watches, glasses, modern shoes). no text, no letters, no logos, watermarks or subtitles, no split screen, no collage.",
-    "Not a cartoon, illustration, digital painting, fantasy art, game graphics or artificial 3D look; no plastic faces, overly smooth skin or exaggerated lighting; no extra fingers, hands or limbs, no distorted bodies, double faces or unnatural eyes; no objects that appear, grow, melt, inflate or transform by themselves."
+    "Not a cartoon, illustration, digital painting, fantasy art, game graphics or artificial 3D look; no plastic faces, overly smooth skin or exaggerated lighting; no extra fingers, hands or limbs, no distorted bodies, double faces or unnatural eyes; no objects that appear, grow, melt, inflate or transform by themselves.",
+    "Background people and animals: keep them few, clearly separated and anatomically complete (no blended crowds, no partial or merged bodies, no shapeless figures). Prefer a shallow depth of field so distant figures are softly out of focus like a real cinema lens, rather than sharp and distorted. When a large crowd is required, use a wide shot where each figure remains distinct.",
+    "Generate at the highest resolution available and deliver the original file without compression or resizing (PNG if available)."
   ].join(" ");
   const VIDEO_RULES = [
     "Animate only the original image; do not rebuild the scene. From the first frame to the last keep the same faces, age, beards, head coverings, clothes, colors, builds, objects and background.",
