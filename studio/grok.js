@@ -34,7 +34,7 @@
   function videoPrompt(opts) {
     const SR = rules();
     const motion = String((opts && opts.motion) || "").trim() || "Slow cinematic push-in.";
-    return [motion, "Vertical 9:16, about 6 seconds.", SR.VIDEO_RULES].concat(SR.sceneRules(opts && opts.scenePrompt)).join("\n\n");
+    return [motion, "Vertical 9:16, at most 9 seconds (never longer).", SR.VIDEO_RULES].concat(SR.sceneRules(opts && opts.scenePrompt)).join("\n\n");
   }
 
   /** which kind of request a chosen file answers: I (image) or V (video); null if neither */

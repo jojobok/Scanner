@@ -133,7 +133,7 @@
   function videoPackage(opts) {
     return [
       "Scanner Studio request " + opts.id,
-      "Create ONE short video (about 6 seconds) with Grok Imagine, using my existing subscription.",
+      "Create ONE short video (at most 9 seconds, never longer) with Grok Imagine, using my existing subscription.",
       "Use the existing approved image " + opts.sourceId + " (in my Google Drive folder \"" + (opts.folder || DEFAULT_FOLDER) + "\") as the first frame.",
       "Format: vertical 9:16, at the highest resolution my plan allows.",
       "Save the actual video file (not a link, not a ZIP) to the same folder.",
