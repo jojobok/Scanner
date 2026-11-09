@@ -109,8 +109,9 @@ async function putReq(env, r) {
   await env.STUDIO.put("req:" + r.id, JSON.stringify(r), { metadata: { status: r.status, claimed_at: r.claimed_at || null } });
 }
 function publicReq(r) {
-  const { id, type, status, created_at, claimed_at, done_at, error, files } = r;
-  return { id, type, status, created_at, claimed_at: claimed_at || null, done_at: done_at || null, error: error || null, files: files || [] };
+  const { id, type, status, created_at, claimed_at, done_at, error, files, then_video } = r;
+  return { id, type, status, created_at, claimed_at: claimed_at || null, done_at: done_at || null, error: error || null, files: files || [],
+           then_video_id: then_video ? then_video.id : null };
 }
 
 // ---------- routes
@@ -131,10 +132,20 @@ async function ownerApi(request, env, url) {
       if (!src || src.type !== "I") return fail(400, "video needs an approved image request id");
       if (!(await env.STUDIO.get("src:" + src.id, { type: "stream" }))) return fail(409, "upload the approved image first");
     }
+    // automatic mode: an image request may carry the follow-up video request, which the server
+    // queues by itself as soon as the bot delivers the image (no manual approval round-trip).
+    let then_video = null;
+    if (body.then_video) {
+      const tv = SR.parseRequestId(body.then_video.id), tp = String(body.then_video.prompt || "").trim();
+      if (parsed.type !== "I" || !tv || tv.id !== body.then_video.id || tv.suffix || tv.type !== "V"
+          || tv.production !== parsed.production || tv.scene !== parsed.scene) return fail(400, "invalid follow-up video id");
+      if (!tp || tp.length > 8000) return fail(400, "follow-up video prompt required (max 8000 chars)");
+      then_video = { id: tv.id, prompt: tp };
+    }
     const existing = await getJSON(env, "req:" + body.id);
     if (existing) return json(publicReq(existing)); // idempotent
     const r = { id: body.id, type: parsed.type, prompt, source_id: body.source_id || null, status: "queued",
-                created_at: new Date().toISOString(), files: [] };
+                created_at: new Date().toISOString(), files: [], then_video };
     await putReq(env, r);
     return json(publicReq(r), 201);
   }
@@ -212,6 +223,11 @@ async function botApi(request, env, url) {
     await env.STUDIO.put("file:" + fid, bytes, { metadata: { mime: kind.mime } });
     await env.STUDIO.put("sha:" + sha, fid);
     r.files = (r.files || []).concat([meta]); r.status = "done"; r.done_at = meta.received_at; r.error = null;
+    if (r.type === "I" && r.then_video && !(await env.STUDIO.get("req:" + r.then_video.id))) {
+      await env.STUDIO.put("src:" + r.id, bytes, { metadata: { mime: kind.mime } });
+      await putReq(env, { id: r.then_video.id, type: "V", prompt: r.then_video.prompt, source_id: r.id, status: "queued",
+                          created_at: meta.received_at, files: [] });
+    }
     await putReq(env, r);
     return json({ ok: true, file_id: fid, name }, 201);
   }

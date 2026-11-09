@@ -99,3 +99,21 @@ test("bot-role worker serves only bot routes", async () => {
   assert.equal((await bot(env, "/api/bot/next")).status, 200);
   assert.equal((await call(env, "/api/bot/next")).status, 401);
 });
+
+test("automatic mode: delivering the image queues its follow-up video in the same bot run", async () => {
+  const env = mk();
+  const img = SR.makeRequestId("K7QM", 3, "I"), vid = SR.makeRequestId("K7QM", 3, "V"), otherScene = SR.makeRequestId("K7QM", 4, "V");
+  const post = body => owner(env, "/api/requests", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  assert.equal((await post({ id: img, type: "I", prompt: "A tent", then_video: { id: otherScene, prompt: "push-in" } })).status, 400, "other scene");
+  assert.equal((await post({ id: img, type: "I", prompt: "A tent", then_video: { id: vid, prompt: "" } })).status, 400, "empty video prompt");
+  const created = await (await post({ id: img, type: "I", prompt: "A tent", then_video: { id: vid, prompt: "Slow push-in" } })).json();
+  assert.equal(created.then_video_id, vid);
+  assert.equal((await owner(env, "/api/requests/" + vid)).status, 404, "video waits for the image");
+  assert.equal((await (await bot(env, "/api/bot/next")).json()).requests.length, 1);
+  assert.equal((await bot(env, "/api/bot/result/" + img, { method: "PUT", body: JPEG })).status, 201);
+  const job = (await (await bot(env, "/api/bot/next")).json()).requests[0];
+  assert.equal(job.id, vid); assert.equal(job.prompt, "Slow push-in");
+  assert.equal((await bot(env, new URL(job.source_image_url).pathname)).status, 200, "delivered image is the first frame");
+  assert.equal((await bot(env, "/api/bot/result/" + vid, { method: "PUT", body: MP4 })).status, 201);
+  assert.equal((await (await owner(env, "/api/requests/" + vid)).json()).status, "done");
+});

@@ -1,7 +1,7 @@
 # Grok Bot routine for Scanner Studio
 
 One-time setup in Grok Bot (xAI's own agent, on your existing subscription). Create a routine with
-a **schedule trigger every 5 minutes**, and paste the text below as its instructions. Replace the
+an **Hourly** automation (the shortest schedule Grok Bot offers; "Run this once now" in the chat runs it immediately), and paste the text below as its instructions. Replace the
 placeholder with the values from the studio setup. Nothing here logs in to grok.com from
 outside; the bot works inside xAI's service and only talks to your studio's server.
 
@@ -32,7 +32,10 @@ You are the Scanner Studio production worker. Every run:
    - If generation or upload fails, POST {"error":"<short reason>"} as JSON to "failure_url"
      with the same headers. Never report success without a successful upload response.
 
-3. Do not create, change or delete anything else. Do not retry a request more than twice in a run.
+3. After handling the list, GET /api/bot/next again and repeat until it returns an empty list
+   (videos for freshly delivered images are queued right away). At most 20 requests per run.
+
+4. Do not create, change or delete anything else. Do not retry a request more than twice in a run.
 ```
 
 ## Studio setup (Cloudflare, free plan, no Zero Trust changes)

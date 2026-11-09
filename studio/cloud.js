@@ -21,7 +21,8 @@
       if (!up.ok) throw new Error("העלאת התמונה המאושרת נכשלה: " + await errorText(up));
     }
     const r = await fetch("/api/requests", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: req.id, type: req.type, prompt: req.grok, source_id: source ? source.id : null }) });
+      body: JSON.stringify({ id: req.id, type: req.type, prompt: req.grok, source_id: source ? source.id : null,
+        then_video: req.then_video || null }) });
     if (!r.ok) throw new Error("השליחה לשרת נכשלה: " + await errorText(r));
     return r.json();
   }

@@ -36,6 +36,8 @@
     <label for="portion">שם הפרשה</label><input id="portion" placeholder="לדוגמה: וירא" autocomplete="off">
     <label for="title">שם הסרטון</label><input id="title" placeholder="כותרת ההפקה" autocomplete="off">
     <div class="actions"><button id="demo" class="secondary">צור תסריט הדגמה</button><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
+    <div class="actions"><button id="autoProduce" class="primary" type="button">הפק את כל הסצנות אוטומטית</button></div>
+    <p id="autoStatus" class="status" role="status"></p>
   </section>
   <section class="panel"><h2>לוח סצנות</h2><p class="notice">תסריט הדגמה בלבד, המבוסס על תבנית הבדיקה של Scanner. אינו תסריט תורני מאומת. יצירה ב־Grok נעשית בדפדפן, בחשבון הקיים שלך, בלי API בתשלום: "צור תמונה" מכין פרומפט, "העתק ופתח ב־Grok" מעתיק אותו ופותח את Grok, ואת התוצר מצרפים בחזרה ב"צרף תוצר מ־Grok". האולפן לא נכנס לחשבון Grok, לא שומר פרטי התחברות ולא מפעיל את Grok אוטומטית. טיוטות וקבצים נשמרים במכשיר זה בלבד. (אפשר עדיין להשתמש בהוראה ל־Grok Bot.)</p><div id="scenes"></div></section>
   <section class="panel"><h2>קליטת תוצרים</h2><p class="notice">ייבוא מרוכז: בחר את הקבצים ש־Grok Bot שמר בתיקיית Studio-Intake (באפליקציית Files ← Google Drive) או קבצים מהמכשיר. קובץ עם מזהה בקשה תקין משויך לסצנה שלו אוטומטית; כל השאר ממתינים כאן לשיוך ידני. כל קובץ נשמר כגרסה נפרדת, וקבצים זהים לא נשמרים פעמיים.</p>
