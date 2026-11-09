@@ -83,12 +83,20 @@ test("matchFile assigns by request id and sends anything uncertain to intake", (
 });
 
 test("house style and scene-specific rules", () => {
-  for (const part of ["cinema camera", "head covering", "hair fully covered", "no Christian iconography", "Do not depict God", "no text"])
+  for (const part of ["cinema camera", "head covering", "hair fully covered", "Christian iconography", "Never depict God", "no text", "not like AI art"])
     assert.ok(SR.STYLE_RULES.includes(part), part);
+  for (const part of ["Animate only the original image", "No morphing", "no lip movement", "slow push-in"])
+    assert.ok(SR.VIDEO_RULES.includes(part), part);
+  assert.match(SR.sceneRules("Aaron in the Tabernacle courtyard").join(" "), /white turban[\s\S]*bronze laver/);
+  assert.match(SR.sceneRules("Stars over the camp at night").join(" "), /stars never appear[\s\S]*|tent must remain/);
+  assert.match(SR.sceneRules("עמוד הענן מעל המחנה").join(" "), /pillar of cloud[\s\S]*|tent/);
+  assert.match(SR.sceneRules("Craftsmen building with a chisel").join(" "), /bronze chisel/);
   assert.equal(SR.sceneRules("A quiet desert at dawn").length, 0);
   assert.match(SR.sceneRules("Moses raises his staff").join(" "), /white tallit/);
   assert.match(SR.sceneRules("משה עומד ליד המשכן").join(" "), /white tallit[\s\S]*Tabernacle/);
   assert.match(SR.sceneRules("The Israelite camp with tents").join(" "), /tent must remain/);
   const pkg = SR.imagePackage({ id: "TS-K7QM-01-I-ABC" + SR.checkChar("K7QM", "I", "ABC"), prompt: "Moses in the camp" });
   assert.ok(pkg.includes("white tallit") && pkg.includes("tent must remain"));
+  assert.ok(!pkg.includes("Opening hook"));
+  assert.ok(SR.imagePackage({ id: "TS-K7QM-01-I-ABC" + SR.checkChar("K7QM", "I", "ABC"), prompt: "x", opening: true }).includes("Opening hook"));
 });

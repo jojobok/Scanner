@@ -24,7 +24,7 @@
     const SR = rules();
     const prompt = String((opts && opts.prompt) || "").trim();
     if (!prompt) throw new Error("missing image prompt");
-    const parts = [prompt, SR.STYLE_RULES].concat(SR.sceneRules(prompt));
+    const parts = [prompt, SR.STYLE_RULES].concat(opts && opts.opening ? [SR.HOOK_RULE] : [], SR.sceneRules(prompt));
     const revision = String((opts && opts.revision) || "").trim();
     if (revision) parts.push("Change only this, keep everything else the same: " + revision);
     return parts.join("\n\n");
