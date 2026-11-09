@@ -1,0 +1,20 @@
+# Copy to wrangler.toml (next to this file) and fill in. Free plan only: Workers + Workers KV.
+name = "scanner-studio"
+main = "index.js"
+compatibility_date = "2026-11-01"
+keep_vars = true          # do not wipe variables already set in the dashboard
+
+[assets]
+directory = ".."            # serves the studio/ folder (see studio/.assetsignore)
+binding = "ASSETS"
+
+[[kv_namespaces]]
+binding = "STUDIO"
+id = "<KV namespace id: wrangler kv namespace create STUDIO>"
+
+[vars]
+ACCESS_TEAM_DOMAIN = "<team>.cloudflareaccess.com"
+ACCESS_AUD = "<Application Audience (AUD) tag of the scanner-studio Access app>"
+OWNER_EMAIL = "<the email allowed by Access>"
+
+# Secret (never in this file):  wrangler secret put BOT_TOKEN   (random, at least 32 characters)

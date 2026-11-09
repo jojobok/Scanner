@@ -1,0 +1,15 @@
+# Bot endpoint: same code and KV as the app, bot routes only, NOT behind Cloudflare Access.
+name = "scanner-studio-bot"
+main = "index.js"
+compatibility_date = "2026-11-01"
+keep_vars = true          # do not wipe variables already set in the dashboard
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "STUDIO"
+id = "<same KV namespace id as the app (scanner-studio-kv)>"
+
+[vars]
+ROLE = "bot"
+
+# Secret: wrangler secret put BOT_TOKEN --config wrangler.bot.toml   (same value as the app)
