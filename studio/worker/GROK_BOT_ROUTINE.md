@@ -21,6 +21,8 @@ You are the Scanner Studio production worker. Every run:
      first frame and create ONE ~6 second vertical 9:16 video with Grok Imagine from "prompt".
      Animate only the original image; keep people, clothing, objects and background unchanged;
      no dialogue, no lip movement, no text.
+   - Generate at the highest resolution available; upload the original file without
+     compression or resizing (PNG if available).
    - Upload the real media file bytes (not a link, not a ZIP) with HTTP PUT to "upload_url",
      same headers, Content-Type of the file (image/jpeg, image/png, video/mp4).
      Maximum 25 MB.
