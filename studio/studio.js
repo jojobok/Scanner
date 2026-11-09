@@ -159,7 +159,7 @@ function renderScript(){
   $("scriptStatus").textContent={sending:"שולח ל־Grok Bot...",
     queued:(sr.cloud_seen==="claimed"?"Grok Bot כותב את התסריט":"הבקשה לתסריט נשלחה ל־Grok Bot. שלח לבוט את ההודעה \"Run this once now\".")+seen,
     error:"השליחה לשרת נכשלה: "+(sr.cloud_error||""),failed:"Grok Bot דיווח על כשל: "+(sr.cloud_error||""),
-    ready:"התסריט הגיע. עבור עליו ולחץ \"החל את התסריט\".",applied:"התסריט הוחל על לוח הסצנות."}[sr.cloud]||"";
+    ready:(sr.source==="chatgpt"?"התסריט מ־ChatGPT תקין.":"התסריט הגיע.")+" עבור עליו ולחץ \"החל את התסריט\".",applied:"התסריט הוחל על לוח הסצנות."}[sr.cloud]||"";
   if(sr.cloud!=="ready"||!sr.script)return;
   const sc=sr.script,add=(tag,text,cls)=>{const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;box.append(e);return e};
   add("h3",sc.title||"תסריט");
@@ -178,6 +178,14 @@ function renderScript(){
   actions.append(apply,again);box.append(actions);box.hidden=false;
 }
 $("writeScript").addEventListener("click",writeScript);
+$("pasteToggle").addEventListener("click",()=>{$("pasteBox").hidden=!$("pasteBox").hidden;if(!$("pasteBox").hidden)$("pasteText").focus()});
+$("pasteCheck").addEventListener("click",()=>{
+  let script;
+  try{script=SR.parseScript($("pasteText").value)}catch(err){$("scriptStatus").textContent="התסריט לא תקין: "+err.message+". בקש מ־ChatGPT להחזיר JSON בלבד.";return}
+  project.script_request={id:"pasted",type:"S",source:"chatgpt",created_at:new Date().toISOString(),cloud:"ready",script};
+  $("pasteText").value="";$("pasteBox").hidden=true;save();renderScript();
+  $("scriptPreview").scrollIntoView({behavior:"smooth",block:"start"});
+});
 $("theme").value=project.theme||"";
 $("theme").addEventListener("input",()=>{project.theme=$("theme").value;save()});
 renderScript();

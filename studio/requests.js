@@ -161,7 +161,11 @@
     let raw = String(text || "");
     const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
     if (a < 0 || b <= a) throw new Error("no JSON object");
-    const data = JSON.parse(raw.slice(a, b + 1));
+    let data;
+    try { data = JSON.parse(raw.slice(a, b + 1)); }
+    catch (e) { // iPhone "smart punctuation" turns JSON quotes into “ ” – straighten them and retry
+      data = JSON.parse(raw.slice(a, b + 1).replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"'));
+    }
     const str = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
     const list = Array.isArray(data.shots) ? data.shots : Array.isArray(data.scenes) ? data.scenes : [];
     const shots = list.slice(0, SCRIPT_MAX_SHOTS).map(x => ({
