@@ -19,17 +19,45 @@
   const ID_RE = /TS-([0-9A-HJKMNP-TV-Z]{4})-(\d{2})-([IV])-([0-9A-HJKMNP-TV-Z]{3})([0-9A-HJKMNP-TV-Z])(?:-([a-z0-9]{1,8}))?/i;
 
   const DEFAULT_FOLDER = "Studio-Intake";
+  // House style (from the production brief): ultra-realistic cinematic biblical realism.
   const STYLE_RULES =
-    "Ultra-realistic professional cinematic biblical scene, vertical 9:16, natural lighting, " +
-    "authentic ancient Middle Eastern setting, historically plausible clothing and architecture, " +
-    "modest attire, consistent character appearance, realistic anatomy and proportions, detailed " +
-    "environment, no modern objects, no text, no logos, no watermarks, no split screen, no collage, " +
-    "no fantasy effects.";
+    "Ultra-realistic cinematic biblical realism, as if filmed with a professional cinema camera. " +
+    "Vertical 9:16, clear composition for a phone screen, one clear main action. Natural cinematic " +
+    "lighting, realistic depth of field and cinema-lens perspective, consistent color grading. " +
+    "Natural human skin and realistic facial texture, believable folds in natural linen and wool, " +
+    "realistic sand, stone, wood and metal textures. People of ancient Israel and the ancient Near East: " +
+    "Middle Eastern features; men with natural full beards and a full cloth head covering draped over " +
+    "the head (not a headband), long modest robes with long sleeves; women modestly dressed with their " +
+    "hair fully covered. Consistent character appearance. Authentic period settings, tools and objects " +
+    "only. Not resembling classical Western religious paintings: no halos, no crosses, no Christian " +
+    "iconography. Do not depict God in any form; show divine presence only as soft natural light, " +
+    "gentle sun rays, a tall vertical column of cloud or natural controlled fire, never portals, lasers " +
+    "or energy beams. No modern objects or clothing (no shirts, trousers, sweaters, watches, glasses, " +
+    "modern shoes or tools); no text, no letters, no logos or watermarks, no split screen, no collage. " +
+    "Not a cartoon, illustration, digital painting, fantasy or game art; no plastic-looking faces, no " +
+    "surreal imagery, no exaggerated artificial lighting, no distorted anatomy or extra limbs.";
   const VIDEO_RULES =
-    "Animate only the original image. Keep every person's face, age, beard, hair, clothing and " +
-    "colors unchanged. Do not add, remove, duplicate or transform any person or object. Keep " +
-    "buildings, tents, landscape and proportions fixed. Independent subtle natural movement, no " +
-    "synchronized gestures. No dialogue, no speaking, no lip movement, no text.";
+    "Animate only the original image. Keep every person's face, age, beard, hair, head covering, " +
+    "clothing and colors unchanged. Do not add, remove, duplicate or transform any person or object. " +
+    "Every building, tent and object keeps its position, size, shape, color and number; keep the " +
+    "landscape and proportions fixed. Independent subtle natural movement (breathing, a small head " +
+    "turn, cloth moving in the wind), no synchronized gestures. Smooth, slow cinematic camera motion " +
+    "only. No dialogue, no speaking, no lip movement, no text.";
+  // Added only when the prompt mentions them.
+  const SCENE_RULES = [
+    [/\bmoses\b|משה/i, "Moses: an older man with a full natural beard, a long white linen robe with long " +
+      "sleeves to the wrists, and a white tallit with subtle gold stripes over his head and shoulders only, " +
+      "never hiding his hands or an important action."],
+    [/tabernacle|mishkan|משכן/i, "The Tabernacle (Mishkan) is not a stone building or temple: a rectangular " +
+      "structure of wooden frames covered with layered fabrics in tekhelet blue, argaman purple, deep " +
+      "crimson and linen; no columns, domes or grand stairs. In the courtyard only the bronze altar and the " +
+      "bronze laver; vessels only in their correct area."],
+    [/\b(camp|tents?)\b|מחנה|אוהל/i, "Every tent must remain completely fixed in its original position, size, " +
+      "shape, color and number."],
+  ];
+  function sceneRules(text) {
+    return SCENE_RULES.filter(([re]) => re.test(String(text || ""))).map(([, rule]) => rule);
+  }
 
   function randomChars(n, rng) {
     const out = [];
@@ -96,7 +124,7 @@
       String(opts.prompt || "").trim(),
       "",
       STYLE_RULES
-    ];
+    ].concat(sceneRules(opts.prompt));
     if (opts.revision && String(opts.revision).trim()) {
       lines.push("", "Revision of " + (opts.previousId || "the previous image") + " – change only this:", String(opts.revision).trim());
     }
@@ -140,7 +168,7 @@
     return { reason: "unknown_request", parsed };
   }
 
-  const api = { ALPHABET, DEFAULT_FOLDER, STYLE_RULES, VIDEO_RULES, checkChar, newProductionCode,
+  const api = { ALPHABET, DEFAULT_FOLDER, STYLE_RULES, VIDEO_RULES, sceneRules, checkChar, newProductionCode,
                 makeRequestId, parseRequestId, imagePackage, videoPackage, matchFile };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.StudioRequests = api;

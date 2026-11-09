@@ -247,7 +247,7 @@ function render() {
       req.package=text(id);
       scene.requests.push(req);save();
       packageArea.value=req.package;packageArea.hidden=false;copyPackage.hidden=false;copyPackage.textContent="העתק הוראה ל־Grok Bot";
-      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision}):GB.videoPrompt({motion:req.motion});save();
+      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision}):GB.videoPrompt({motion:req.motion,scenePrompt:scene.image_prompt});save();
       if(CLOUD.state.available){sendToBot(scene,req)}else{showGrok(req)}
       renderRequests();
     }

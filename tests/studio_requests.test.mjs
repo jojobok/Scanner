@@ -81,3 +81,14 @@ test("matchFile assigns by request id and sends anything uncertain to intake", (
   const unknown = "TS-K7QM-02-I-XYZ" + SR.checkChar("K7QM", "I", "XYZ");
   assert.equal(SR.matchFile(project, unknown + ".jpg", "image/jpeg").reason, "unknown_request");
 });
+
+test("house style and scene-specific rules", () => {
+  for (const part of ["cinema camera", "head covering", "hair fully covered", "no Christian iconography", "Do not depict God", "no text"])
+    assert.ok(SR.STYLE_RULES.includes(part), part);
+  assert.equal(SR.sceneRules("A quiet desert at dawn").length, 0);
+  assert.match(SR.sceneRules("Moses raises his staff").join(" "), /white tallit/);
+  assert.match(SR.sceneRules("משה עומד ליד המשכן").join(" "), /white tallit[\s\S]*Tabernacle/);
+  assert.match(SR.sceneRules("The Israelite camp with tents").join(" "), /tent must remain/);
+  const pkg = SR.imagePackage({ id: "TS-K7QM-01-I-ABC" + SR.checkChar("K7QM", "I", "ABC"), prompt: "Moses in the camp" });
+  assert.ok(pkg.includes("white tallit") && pkg.includes("tent must remain"));
+});
