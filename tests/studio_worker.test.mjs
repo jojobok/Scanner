@@ -117,3 +117,22 @@ test("automatic mode: delivering the image queues its follow-up video in the sam
   assert.equal((await bot(env, "/api/bot/result/" + vid, { method: "PUT", body: MP4 })).status, 201);
   assert.equal((await (await owner(env, "/api/requests/" + vid)).json()).status, "done");
 });
+
+test("script request: bot uploads JSON, server validates and returns the shot list", async () => {
+  const env = mk();
+  const id = SR.makeRequestId("K7QM", 0, "S");
+  const post = body => owner(env, "/api/requests", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  assert.equal((await post({ id, type: "S", prompt: SR.scriptPrompt({ parasha: "תולדות" }) })).status, 201);
+  const job = (await (await bot(env, "/api/bot/next")).json()).requests[0];
+  assert.equal(job.type, "script"); assert.match(job.prompt, /Parashat תולדות/);
+  const up = body => bot(env, "/api/bot/result/" + id, { method: "PUT", body, headers: { "content-type": "application/json" } });
+  assert.equal((await up("not json")).status, 422);
+  assert.equal((await up(JSON.stringify({ shots: [{ narration: "x" }] }))).status, 422, "shots need image_prompt");
+  const script = { title: "הבכורה", characters: [{ name: "עשו", look: "red-haired hunter" }],
+    shots: [{ shot_type: "extreme close-up", image_prompt: "A bowl of red lentil stew", motion: "Slow push-in", narration: "קערה אחת", on_screen_text: "" },
+            { image_prompt: "Esau at the tent door", narration: "עשו חוזר" }] };
+  assert.equal((await up("```json\n" + JSON.stringify(script) + "\n```")).status, 201, "code fence tolerated");
+  const st = await (await owner(env, "/api/requests/" + id)).json();
+  assert.equal(st.status, "done"); assert.equal(st.script.shots.length, 2); assert.equal(st.script.shots[1].motion, "");
+  assert.equal(st.script.characters[0].name, "עשו");
+});

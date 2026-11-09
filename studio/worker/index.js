@@ -109,9 +109,9 @@ async function putReq(env, r) {
   await env.STUDIO.put("req:" + r.id, JSON.stringify(r), { metadata: { status: r.status, claimed_at: r.claimed_at || null } });
 }
 function publicReq(r) {
-  const { id, type, status, created_at, claimed_at, done_at, error, files, then_video } = r;
+  const { id, type, status, created_at, claimed_at, done_at, error, files, then_video, script } = r;
   return { id, type, status, created_at, claimed_at: claimed_at || null, done_at: done_at || null, error: error || null, files: files || [],
-           then_video_id: then_video ? then_video.id : null };
+           then_video_id: then_video ? then_video.id : null, script: script || null };
 }
 
 // ---------- routes
@@ -126,7 +126,8 @@ async function ownerApi(request, env, url) {
     if (!parsed || parsed.id !== body.id || parsed.suffix) return fail(400, "invalid request id");
     if (body.type !== parsed.type) return fail(400, "type does not match id");
     const prompt = String(body.prompt || "").trim();
-    if (!prompt || prompt.length > 8000) return fail(400, "prompt required (max 8000 chars)");
+    const maxPrompt = parsed.type === "S" ? 16000 : 8000;
+    if (!prompt || prompt.length > maxPrompt) return fail(400, "prompt required (max " + maxPrompt + " chars)");
     if (parsed.type === "V") {
       const src = SR.parseRequestId(body.source_id);
       if (!src || src.type !== "I") return fail(400, "video needs an approved image request id");
@@ -188,7 +189,7 @@ async function botApi(request, env, url) {
         if (!r || (r.status !== "queued" && r.status !== "claimed")) continue;
         r.status = "claimed"; r.claimed_at = new Date().toISOString(); r.attempts = (r.attempts || 0) + 1;
         await putReq(env, r);
-        out.push({ id: r.id, type: r.type === "V" ? "video" : "image", prompt: r.prompt,
+        out.push({ id: r.id, type: r.type === "V" ? "video" : r.type === "S" ? "script" : "image", prompt: r.prompt,
                    source_image_url: r.source_id ? url.origin + "/api/bot/source/" + r.source_id : null,
                    upload_url: url.origin + "/api/bot/result/" + r.id,
                    failure_url: url.origin + "/api/bot/fail/" + r.id });
@@ -207,6 +208,14 @@ async function botApi(request, env, url) {
   if ((m = p.match(/^\/api\/bot\/result\/([A-Z0-9-]+)$/)) && (request.method === "PUT" || request.method === "POST")) {
     const r = await getJSON(env, "req:" + m[1]);
     if (!r) return fail(404, "unknown request");
+    if (r.type === "S") { // script: JSON text, validated and stored with the request
+      const text = await request.text();
+      if (!text || text.length > 200000) return fail(400, "script must be 1-200000 chars of JSON");
+      let script; try { script = SR.parseScript(text); } catch (e) { return fail(422, "invalid script: " + e.message); }
+      r.script = script; r.status = "done"; r.done_at = new Date().toISOString(); r.error = null;
+      await putReq(env, r);
+      return json({ ok: true, shots: script.shots.length }, 201);
+    }
     const bytes = await request.arrayBuffer();
     if (!bytes.byteLength) return fail(400, "empty file");
     if (bytes.byteLength > MAX_BYTES) return fail(413, "larger than 25MB");

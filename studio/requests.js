@@ -15,8 +15,8 @@
 //   CHK    check character over PROD4 + T + REQ3 (catches typos)
 (function (root) {
   const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // Crockford: no I, L, O, U
-  const TYPES = { I: 0, V: 1 };
-  const ID_RE = /TS-([0-9A-HJKMNP-TV-Z]{4})-(\d{2})-([IV])-([0-9A-HJKMNP-TV-Z]{3})([0-9A-HJKMNP-TV-Z])(?:-([a-z0-9]{1,8}))?/i;
+  const TYPES = { I: 0, V: 1, S: 2 }; // image, video, script
+  const ID_RE = /TS-([0-9A-HJKMNP-TV-Z]{4})-(\d{2})-([IVS])-([0-9A-HJKMNP-TV-Z]{3})([0-9A-HJKMNP-TV-Z])(?:-([a-z0-9]{1,8}))?/i;
 
   const DEFAULT_FOLDER = "Studio-Intake";
   // House style – the owner's style guide (studio/STYLE_GUIDE.md), in English for Grok.
@@ -89,8 +89,8 @@
 
   function makeRequestId(prod, sceneNumber, type, rng) {
     if (!/^[0-9A-HJKMNP-TV-Z]{4}$/.test(prod)) throw new Error("invalid production code");
-    if (!(type in TYPES)) throw new Error("type must be I or V");
-    const n = Math.max(1, Math.min(99, Math.floor(sceneNumber)));
+    if (!(type in TYPES)) throw new Error("type must be I, V or S");
+    const n = Math.max(type === "S" ? 0 : 1, Math.min(99, Math.floor(sceneNumber)));
     const req = randomChars(3, rng || defaultRng());
     return "TS-" + prod + "-" + String(n).padStart(2, "0") + "-" + type + "-" + req + checkChar(prod, type, req);
   }
@@ -128,6 +128,51 @@
       lines.push("", "Revision of " + (opts.previousId || "the previous image") + " – change only this:", String(opts.revision).trim());
     }
     return lines.join("\n");
+  }
+
+  // ---- script stage: Grok Bot writes the whole shot list (style guide: meaning first, hook, variety, Character Lock)
+  const SCRIPT_SHOTS = 15, SCRIPT_MAX_SHOTS = 30;
+  function scriptPrompt(opts) {
+    const parasha = String(opts.parasha || "").trim(), theme = String(opts.theme || "").trim();
+    return [
+      "Write the script and shot list for a vertical 9:16 cinematic Torah video of about 90 seconds on the weekly Torah portion: Parashat " + parasha + ".",
+      theme ? "Theme requested by the producer: " + theme + "." :
+        "First choose ONE strong, emotional and surprising moment or idea from this portion that carries a clear, practical life message for today. Prefer a dramatic story moment over a general summary.",
+      "Be faithful to the verses and to classic Jewish commentary (Rashi, Midrash). Never invent events that are not in the text or the commentaries.",
+      "Story arc: shot 1 is the HOOK – the most intriguing or dramatic image of the story, shown before any explanation (an extreme close-up of a meaningful detail, an unusual angle, a decisive action). Then build tension, reach the turning point, and end with the message in the last 2 shots.",
+      "Exactly " + SCRIPT_SHOTS + " shots, each about 6 seconds.",
+      "Shot variety is mandatory: mix wide, medium, close-up, extreme close-up, symbolic detail (hands, eyes, feet in sand, cloth, a vessel, fire, food, a staff), from behind, low angle, high angle, shallow depth of field. Never two consecutive shots of the same type or the same idea. At most 3 wide shots. After a wide shot, cut to a detail, a face or an action. No sequences of a man standing or walking in a landscape.",
+      "Character Lock: define every recurring character once in \"characters\" with a fixed, detailed look (age, face, beard, hair, head covering, clothes and colors, build), and copy that exact description word for word into every image_prompt where the character appears. Men's head covering: a large plain undyed linen or wool cloth draped over the head like a hood, never a black cord or keffiyeh.",
+      "image_prompt (English): one clear subject and one main action; state the shot type, camera angle, lens and depth of field, lighting, time of day, who is in the frame and where, and what must stay unchanged. No text in the image. Never depict God; divine presence only as natural light. Do not repeat the general house style rules (they are added automatically).",
+      "motion (English): one professional camera move for the image-to-video clip, e.g. \"Slow push-in on his eyes\", \"Low-angle slow tilt up\", \"Slow orbit around the hands\". A stronger but controlled move is allowed for the hook.",
+      "narration (Hebrew): 12-16 spoken words per shot (about 6 seconds), natural modern Hebrew, together one flowing story that ends with the message. Quote at most one short verse.",
+      "on_screen_text (Hebrew): an optional caption of 2-5 words, or an empty string.",
+      "",
+      "Return ONLY valid JSON, no markdown, in exactly this shape:",
+      '{"title":"Hebrew title","theme":"Hebrew, one sentence","message":"Hebrew, the life message","anchor_verse":"Hebrew verse with its reference",' +
+        '"characters":[{"name":"Hebrew name","look":"English fixed description"}],' +
+        '"shots":[{"shot_type":"e.g. extreme close-up","image_prompt":"English","motion":"English","narration":"Hebrew","on_screen_text":"Hebrew or empty"}]}',
+      "",
+      "House style for reference: " + STYLE_RULES
+    ].join("\n");
+  }
+  // Accepts the bot's text (possibly wrapped in a code fence) and returns a clean script or throws.
+  function parseScript(text) {
+    let raw = String(text || "");
+    const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
+    if (a < 0 || b <= a) throw new Error("no JSON object");
+    const data = JSON.parse(raw.slice(a, b + 1));
+    const str = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
+    const list = Array.isArray(data.shots) ? data.shots : Array.isArray(data.scenes) ? data.scenes : [];
+    const shots = list.slice(0, SCRIPT_MAX_SHOTS).map(x => ({
+      shot_type: str(x.shot_type, 80), image_prompt: str(x.image_prompt, 3000), motion: str(x.motion, 500),
+      narration: str(x.narration, 1000), on_screen_text: str(x.on_screen_text, 120)
+    })).filter(x => x.image_prompt);
+    if (!shots.length) throw new Error("script has no shots with image_prompt");
+    const characters = (Array.isArray(data.characters) ? data.characters : []).slice(0, 12)
+      .map(c => ({ name: str(c && c.name, 80), look: str(c && c.look, 1500) })).filter(c => c.name);
+    return { title: str(data.title, 200), theme: str(data.theme, 500), message: str(data.message, 500),
+             anchor_verse: str(data.anchor_verse, 500), characters, shots };
   }
 
   function videoPackage(opts) {
@@ -168,7 +213,8 @@
   }
 
   const api = { ALPHABET, DEFAULT_FOLDER, STYLE_RULES, VIDEO_RULES, HOOK_RULE, sceneRules, checkChar, newProductionCode,
-                makeRequestId, parseRequestId, imagePackage, videoPackage, matchFile };
+                makeRequestId, parseRequestId, imagePackage, videoPackage, matchFile,
+                SCRIPT_SHOTS, scriptPrompt, parseScript };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.StudioRequests = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
