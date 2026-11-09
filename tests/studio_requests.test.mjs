@@ -100,3 +100,12 @@ test("house style and scene-specific rules", () => {
   assert.ok(!pkg.includes("Opening hook"));
   assert.ok(SR.imagePackage({ id: "TS-K7QM-01-I-ABC" + SR.checkChar("K7QM", "I", "ABC"), prompt: "x", opening: true }).includes("Opening hook"));
 });
+
+test("parseScript accepts ChatGPT JSON with iPhone smart quotes and keeps Hebrew gershayim", () => {
+  const text = '{“title”:“פרשת תולדות”,“anchor_verse”:”״הַקֹּל קוֹל יַעֲקֹב״ — בראשית כ״ז, כ״ב”,“characters”:[{“name”:“יצחק”,“look”:“white beard”}],' +
+    '“shots”:[{“shot_type”:“extreme close-up”,“image_prompt”:“Isaac’s trembling hand”,“motion”:“Slow push-in”,“narration”:“יצחק כבר בירך”,“on_screen_text”:””}]}';
+  const s = SR.parseScript(text);
+  assert.equal(s.title, "פרשת תולדות"); assert.equal(s.shots.length, 1);
+  assert.match(s.anchor_verse, /כ״ז/); assert.equal(s.shots[0].image_prompt, "Isaac’s trembling hand");
+  assert.throws(() => SR.parseScript("just some prose"));
+});
