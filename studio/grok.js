@@ -24,7 +24,7 @@
     const SR = rules();
     const prompt = String((opts && opts.prompt) || "").trim();
     if (!prompt) throw new Error("missing image prompt");
-    const parts = [prompt, SR.STYLE_RULES];
+    const parts = [prompt, SR.STYLE_RULES].concat(opts && opts.opening ? [SR.HOOK_RULE] : [], SR.sceneRules(prompt));
     const revision = String((opts && opts.revision) || "").trim();
     if (revision) parts.push("Change only this, keep everything else the same: " + revision);
     return parts.join("\n\n");
@@ -34,7 +34,7 @@
   function videoPrompt(opts) {
     const SR = rules();
     const motion = String((opts && opts.motion) || "").trim() || "Slow cinematic push-in.";
-    return [motion, "Vertical 9:16, about 6 seconds.", SR.VIDEO_RULES].join("\n\n");
+    return [motion, "Vertical 9:16, about 6 seconds.", SR.VIDEO_RULES].concat(SR.sceneRules(opts && opts.scenePrompt)).join("\n\n");
   }
 
   /** which kind of request a chosen file answers: I (image) or V (video); null if neither */

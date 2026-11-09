@@ -247,7 +247,7 @@ function render() {
       req.package=text(id);
       scene.requests.push(req);save();
       packageArea.value=req.package;packageArea.hidden=false;copyPackage.hidden=false;copyPackage.textContent="העתק הוראה ל־Grok Bot";
-      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision}):GB.videoPrompt({motion:req.motion});save();
+      req.grok=type==="I"?GB.imagePrompt({prompt:req.prompt,revision:req.revision,opening:index===0}):GB.videoPrompt({motion:req.motion,scenePrompt:scene.image_prompt});save();
       if(CLOUD.state.available){sendToBot(scene,req)}else{showGrok(req)}
       renderRequests();
     }
@@ -256,7 +256,7 @@ function render() {
       if(!scenePrompt){alert("יש למלא קודם פרומפט לתמונה");return}
       const prev=latest("I");
       const revision=scene.image_status==="revision"?(scene.image_revision||""):"";
-      addRequest("I",id=>SR.imagePackage({id,prompt:scenePrompt,revision,previousId:prev&&prev.id}),{prompt:scenePrompt,revision});
+      addRequest("I",id=>SR.imagePackage({id,prompt:scenePrompt,revision,previousId:prev&&prev.id,opening:index===0}),{prompt:scenePrompt,revision});
       if(scene.image_status!=="revision"){scene.image_status="not_started"}
       save();
     });
