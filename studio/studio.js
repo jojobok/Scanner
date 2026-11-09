@@ -61,7 +61,10 @@ async function pollBot(){
     for(const scene of project.scenes){
       for(const req of scene.requests.filter(r=>r.status==="waiting"&&r.cloud==="queued")){
         let st;try{st=await CLOUD.status(req.id)}catch(_){continue}
-        if(st.status==="failed"){req.cloud="failed";req.cloud_error=st.error;changed=true;continue}
+        if(st.status==="failed"){req.cloud="failed";req.cloud_error=st.error;changed=true;
+          const follow=req.then_video&&scene.requests.find(r=>r.id===req.then_video.id&&r.cloud==="after_image");
+          if(follow){follow.cloud="failed";follow.cloud_error="יצירת התמונה נכשלה"}
+          continue}
         if(st.status==="claimed"&&req.cloud_seen!=="claimed"){req.cloud_seen="claimed";changed=true}
         const imported=req.cloud_imported||(req.cloud_imported=[]);
         for(const f of st.files||[]){
@@ -71,6 +74,13 @@ async function pollBot(){
           imported.push(f.file_id);
           if(res.entry){res.entry.remote_file_id=f.file_id;linkToRequest(res.entry,scene,req)}
           else if(res.duplicate){req.status="received"}
+          if(req.then_video){ // automatic mode: approve the image; the server already queued its video
+            const media=res.entry||res.duplicate;
+            if(media&&media.id)scene.approved_media_id=media.id;
+            scene.image_status="approved";scene.approved_image_request=req.id;
+            const follow=scene.requests.find(r=>r.id===req.then_video.id&&r.cloud==="after_image");
+            if(follow)follow.cloud="queued";
+          }
           changed=true;
         }
       }
@@ -78,6 +88,37 @@ async function pollBot(){
   }finally{polling=false}
   if(changed){save();render();renderIntake()}
 }
+// One button: every scene that has an image prompt and no video yet gets an image request whose
+// video is queued by the server as soon as the image arrives; scenes with an approved image get a video.
+const AUTO_MOTION="Slow cinematic push-in.";
+function autoProduce(){
+  if(!CLOUD.state.available){alert("השרת של האולפן לא זמין כרגע. נסה שוב בעוד רגע.");return}
+  let count=0;const now=new Date().toISOString();
+  project.scenes.forEach((scene,index)=>{
+    const prompt=(scene.image_prompt||"").trim();if(!prompt)return;
+    if(scene.requests.some(r=>r.type==="V"&&r.status==="received"))return;
+    if(scene.requests.some(r=>r.status==="waiting"&&["sending","queued","after_image"].includes(r.cloud)))return;
+    scene.requests.filter(r=>r.status==="waiting").forEach(r=>{r.status="superseded"});
+    const vid={id:SR.makeRequestId(project.code,index+1,"V"),type:"V",status:"waiting",created_at:now,motion:AUTO_MOTION,auto:true,
+      grok:GB.videoPrompt({motion:AUTO_MOTION,scenePrompt:prompt})};
+    if(scene.image_status==="approved"&&scene.approved_image_request&&approvedMediaOf(scene)){
+      vid.source=scene.approved_image_request;vid.package=SR.videoPackage({id:vid.id,sourceId:vid.source,motion:AUTO_MOTION});
+      scene.requests.push(vid);sendToBot(scene,vid);
+    }else{
+      const img={id:SR.makeRequestId(project.code,index+1,"I"),type:"I",status:"waiting",created_at:now,prompt,revision:"",auto:true,
+        grok:GB.imagePrompt({prompt,revision:"",opening:index===0}),then_video:{id:vid.id,prompt:vid.grok}};
+      img.package=SR.imagePackage({id:img.id,prompt,revision:"",opening:index===0});
+      vid.source=img.id;vid.cloud="after_image";vid.package=SR.videoPackage({id:vid.id,sourceId:img.id,motion:AUTO_MOTION});
+      scene.requests.push(img,vid);sendToBot(scene,img);
+    }
+    count++;
+  });
+  save();render();
+  $("autoStatus").textContent=count
+    ?"נשלחו "+count+" סצנות ל־Grok Bot. התמונות והסרטונים ייכנסו לסצנות לבד כשהבוט ירוץ."
+    :"אין סצנות להפקה: לכל סצנה עם פרומפט כבר יש סרטון או בקשה בתהליך.";
+}
+$("autoProduce").addEventListener("click",autoProduce);
 CLOUD.health().then(st=>{if(st.available){render();pollBot();setInterval(pollBot,20000)}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollBot()});
 function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
@@ -236,7 +277,7 @@ function render() {
           error:"השליחה לשרת נכשלה: "+(img.cloud_error||""),failed:"Grok Bot דיווח על כשל: "+(img.cloud_error||"")+". לחץ שוב \"צור תמונה\" לבקשה חדשה."}[img.cloud]||generationStatus.textContent;
       }
       const vid=latest("V");
-      if(vid&&vid.status==="waiting"&&vid.cloud)videoButton.title={queued:"הסרטון נשלח ל־Grok Bot",failed:"Grok Bot דיווח על כשל: "+(vid.cloud_error||"")}[vid.cloud]||"";
+      if(vid&&vid.status==="waiting"&&vid.cloud)videoButton.title={after_image:"הסרטון ייווצר אוטומטית אחרי התמונה",queued:"הסרטון נשלח ל־Grok Bot",failed:"Grok Bot דיווח על כשל: "+(vid.cloud_error||"")}[vid.cloud]||"";
       const open=[...scene.requests].reverse().find(r=>r.status==="waiting"&&r.grok&&!r.cloud);
       showGrok(open);
     }
