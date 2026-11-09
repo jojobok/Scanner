@@ -83,7 +83,7 @@ test("matchFile assigns by request id and sends anything uncertain to intake", (
 });
 
 test("house style and scene-specific rules", () => {
-  for (const part of ["cinema camera", "head covering", "hair fully covered", "Christian iconography", "Never depict God", "no text", "not like AI art", "anatomically complete", "shallow depth of field", "highest resolution", "Never a black cord", "draped over the head like a hood"])
+  for (const part of ["cinema camera", "head covering", "hair fully covered", "Christian iconography", "Never depict God", "no text", "not like AI art", "anatomically complete", "shallow depth of field", "highest resolution", "Never a black cord", "draped over the head like a hood", "epic golden hour", "rim light"])
     assert.ok(SR.STYLE_RULES.includes(part), part);
   for (const part of ["Animate only the original image", "No morphing", "no lip movement", "slow push-in"])
     assert.ok(SR.VIDEO_RULES.includes(part), part);
