@@ -36,6 +36,9 @@
     <label for="portion">שם הפרשה</label><input id="portion" placeholder="לדוגמה: וירא" autocomplete="off">
     <label for="title">שם הסרטון</label><input id="title" placeholder="כותרת ההפקה" autocomplete="off">
     <div class="actions"><button id="demo" class="secondary">צור תסריט הדגמה</button><button id="add" class="primary">הוסף סצנה</button><button id="export" class="secondary">ייצוא תכנון JSON</button></div>
+    <label for="theme">נושא מרכזי (לא חובה)</label><input id="theme" placeholder="ריק = Grok Bot יבחר את הרגע החזק בפרשה" autocomplete="off">
+    <div class="actions"><button id="writeScript" class="primary" type="button">כתוב תסריט לפרשה</button></div>
+    <p id="scriptStatus" class="status" role="status"></p><div id="scriptPreview" hidden></div>
     <div class="actions"><button id="autoProduce" class="primary" type="button">הפק את כל הסצנות אוטומטית</button></div>
     <p id="autoStatus" class="status" role="status"></p>
   </section>

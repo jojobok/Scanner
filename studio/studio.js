@@ -58,6 +58,13 @@ async function pollBot(){
   if(polling||!CLOUD.state.available||document.hidden)return;
   polling=true;let changed=false;
   try{
+    const sr=project.script_request;
+    if(sr&&sr.cloud==="queued"){
+      try{const st=await CLOUD.status(sr.id);
+        if(st.status==="done"&&st.script){sr.cloud="ready";sr.script=st.script;changed=true}
+        else if(st.status==="failed"){sr.cloud="failed";sr.cloud_error=st.error;changed=true}
+        else if(st.status==="claimed"&&sr.cloud_seen!=="claimed"){sr.cloud_seen="claimed";changed=true}}catch(_){}
+    }
     for(const scene of project.scenes){
       for(const req of scene.requests.filter(r=>r.status==="waiting"&&r.cloud==="queued")){
         let st;try{st=await CLOUD.status(req.id)}catch(_){continue}
@@ -86,7 +93,7 @@ async function pollBot(){
       }
     }
   }finally{polling=false}
-  if(changed){save();render();renderIntake()}
+  if(changed){save();render();renderIntake();renderScript()}
 }
 // One button: every scene that has an image prompt and no video yet gets an image request whose
 // video is queued by the server as soon as the image arrives; scenes with an approved image get a video.
@@ -99,16 +106,17 @@ function autoProduce(){
     if(scene.requests.some(r=>r.type==="V"&&r.status==="received"))return;
     if(scene.requests.some(r=>r.status==="waiting"&&["sending","queued","after_image"].includes(r.cloud)))return;
     scene.requests.filter(r=>r.status==="waiting").forEach(r=>{r.status="superseded"});
-    const vid={id:SR.makeRequestId(project.code,index+1,"V"),type:"V",status:"waiting",created_at:now,motion:AUTO_MOTION,auto:true,
-      grok:GB.videoPrompt({motion:AUTO_MOTION,scenePrompt:prompt})};
+    const motion=(scene.motion||"").trim()||AUTO_MOTION;
+    const vid={id:SR.makeRequestId(project.code,index+1,"V"),type:"V",status:"waiting",created_at:now,motion,auto:true,
+      grok:GB.videoPrompt({motion,scenePrompt:prompt})};
     if(scene.image_status==="approved"&&scene.approved_image_request&&approvedMediaOf(scene)){
-      vid.source=scene.approved_image_request;vid.package=SR.videoPackage({id:vid.id,sourceId:vid.source,motion:AUTO_MOTION});
+      vid.source=scene.approved_image_request;vid.package=SR.videoPackage({id:vid.id,sourceId:vid.source,motion});
       scene.requests.push(vid);sendToBot(scene,vid);
     }else{
       const img={id:SR.makeRequestId(project.code,index+1,"I"),type:"I",status:"waiting",created_at:now,prompt,revision:"",auto:true,
         grok:GB.imagePrompt({prompt,revision:"",opening:index===0}),then_video:{id:vid.id,prompt:vid.grok}};
       img.package=SR.imagePackage({id:img.id,prompt,revision:"",opening:index===0});
-      vid.source=img.id;vid.cloud="after_image";vid.package=SR.videoPackage({id:vid.id,sourceId:img.id,motion:AUTO_MOTION});
+      vid.source=img.id;vid.cloud="after_image";vid.package=SR.videoPackage({id:vid.id,sourceId:img.id,motion});
       scene.requests.push(img,vid);sendToBot(scene,img);
     }
     count++;
@@ -119,6 +127,60 @@ function autoProduce(){
     :"אין סצנות להפקה: לכל סצנה עם פרומפט כבר יש סרטון או בקשה בתהליך.";
 }
 $("autoProduce").addEventListener("click",autoProduce);
+// ---- script stage: Grok Bot writes title, message, Character Lock and the full shot list
+async function writeScript(){
+  const parasha=($("portion").value||"").trim();
+  if(!parasha){alert("כתוב קודם את שם הפרשה");$("portion").focus();return}
+  if(!CLOUD.state.available){alert("השרת של האולפן לא זמין כרגע. נסה שוב בעוד רגע.");return}
+  const sr={id:SR.makeRequestId(project.code,0,"S"),type:"S",status:"waiting",created_at:new Date().toISOString(),
+    grok:SR.scriptPrompt({parasha,theme:project.theme}),cloud:"sending"};
+  project.script_request=sr;save();renderScript();
+  try{await CLOUD.submit(sr,null);sr.cloud="queued"}catch(err){sr.cloud="error";sr.cloud_error=err.message}
+  save();renderScript();
+}
+function applyScript(){
+  const sr=project.script_request,sc=sr&&sr.script;if(!sc)return;
+  const used=project.scenes.filter(s=>(s.image_prompt||"").trim()||(s.narration||"").trim()||s.requests.length);
+  if(used.length&&!confirm("התסריט יחליף את "+used.length+" הסצנות הנוכחיות. התמונות והסרטונים שלהן יעברו לקליטת תוצרים ולא יימחקו. להמשיך?"))return;
+  try{const arch=JSON.parse(localStorage.getItem("scanner-studio-archive-v1")||"[]");
+    arch.unshift({saved_at:new Date().toISOString(),title:project.title,portion:project.portion,scenes:project.scenes});
+    localStorage.setItem("scanner-studio-archive-v1",JSON.stringify(arch.slice(0,5)))}catch(_){}
+  project.media.filter(m=>m.scene_uid).forEach(m=>{m.scene_uid=null;m.reason="scene_deleted";MEDIA.setScene(m.id,null).catch(()=>{})});
+  project.scenes=sc.shots.map(x=>({uid:sceneUid(),narration:x.narration,image_prompt:x.image_prompt,motion:x.motion,
+    shot_type:x.shot_type,on_screen_text:x.on_screen_text,approved:false,requests:[]}));
+  project.title=sc.title||project.title;$("title").value=project.title||"";
+  project.characters=sc.characters;project.script_info={theme:sc.theme,message:sc.message,anchor_verse:sc.anchor_verse};
+  sr.cloud="applied";expandedScene=null;save();render();renderIntake();renderScript();
+}
+function renderScript(){
+  const sr=project.script_request,box=$("scriptPreview");box.replaceChildren();box.hidden=true;
+  if(!sr){$("scriptStatus").textContent="";return}
+  const seen=CLOUD.state.bot_last_seen?" · Grok Bot בדק לאחרונה ב־"+new Date(CLOUD.state.bot_last_seen).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):"";
+  $("scriptStatus").textContent={sending:"שולח ל־Grok Bot...",
+    queued:(sr.cloud_seen==="claimed"?"Grok Bot כותב את התסריט":"הבקשה לתסריט נשלחה ל־Grok Bot. שלח לבוט את ההודעה \"Run this once now\".")+seen,
+    error:"השליחה לשרת נכשלה: "+(sr.cloud_error||""),failed:"Grok Bot דיווח על כשל: "+(sr.cloud_error||""),
+    ready:"התסריט הגיע. עבור עליו ולחץ \"החל את התסריט\".",applied:"התסריט הוחל על לוח הסצנות."}[sr.cloud]||"";
+  if(sr.cloud!=="ready"||!sr.script)return;
+  const sc=sr.script,add=(tag,text,cls)=>{const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;box.append(e);return e};
+  add("h3",sc.title||"תסריט");
+  if(sc.theme)add("p","נושא: "+sc.theme);
+  if(sc.message)add("p","מסר: "+sc.message);
+  if(sc.anchor_verse)add("p","פסוק: "+sc.anchor_verse,"status");
+  if(sc.characters.length)add("p","דמויות: "+sc.characters.map(c=>c.name).join(", "),"status");
+  const ol=document.createElement("ol");
+  sc.shots.forEach(x=>{const li=document.createElement("li");li.textContent=(x.shot_type?"["+x.shot_type+"] ":"")+(x.narration||x.image_prompt);ol.append(li)});
+  box.append(ol);
+  const actions=document.createElement("div");actions.className="actions";
+  const apply=document.createElement("button");apply.type="button";apply.className="primary";apply.textContent="החל את התסריט ("+sc.shots.length+" שוטים)";
+  apply.addEventListener("click",applyScript);
+  const again=document.createElement("button");again.type="button";again.className="secondary";again.textContent="כתוב תסריט אחר";
+  again.addEventListener("click",writeScript);
+  actions.append(apply,again);box.append(actions);box.hidden=false;
+}
+$("writeScript").addEventListener("click",writeScript);
+$("theme").value=project.theme||"";
+$("theme").addEventListener("input",()=>{project.theme=$("theme").value;save()});
+renderScript();
 CLOUD.health().then(st=>{if(st.available){render();pollBot();setInterval(pollBot,20000)}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollBot()});
 function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
@@ -303,7 +365,7 @@ function render() {
     });
     videoButton.addEventListener("click",()=>{
       if(videoButton.disabled){alert("יש לאשר קודם תמונה לסצנה");return}
-      const motion=prompt("תנועת מצלמה לסרטון (באנגלית):","Slow cinematic push-in.");
+      const motion=prompt("תנועת מצלמה לסרטון (באנגלית):",(scene.motion||"").trim()||"Slow cinematic push-in.");
       if(motion===null)return;
       addRequest("V",id=>SR.videoPackage({id,sourceId:scene.approved_image_request,motion}),{source:scene.approved_image_request,motion});
     });
