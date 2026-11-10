@@ -211,7 +211,7 @@ if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().th
 function finalSignature(){return project.scenes.map(s=>{const m=sceneVideo(s);return m?m.id:"-"}).join("|")}
 function maybeAutoAssemble(){
   if(assembling||document.hidden||!project.scenes.length||!project.scenes.every(sceneVideo))return;
-  if(project.final_sig===finalSignature())return;
+  if(project.final_sig===finalSignature()||project.final_fail_sig===finalSignature())return; // done, or failed once: wait for a tap
   runAssemble(true);
 }
 $("assemble").addEventListener("click",()=>runAssemble(false));
@@ -246,7 +246,7 @@ async function assembleNow(auto){
     project.final_sig=finalSignature();save();
     if(auto)$("finalStatus").closest("section").scrollIntoView({behavior:"smooth",block:"start"});
     st.textContent="הסרטון מוכן: "+blobs.length+" שוטים, "+Math.round(res.seconds)+" שניות, "+(res.blob.size/1048576).toFixed(0)+"MB.";
-  }catch(err){st.textContent="ההרכבה נכשלה: "+err.message}
+  }catch(err){st.textContent="ההרכבה נכשלה: "+err.message+". אפשר לנסות שוב בכפתור.";project.final_fail_sig=finalSignature();save()}
   finally{btn.disabled=false;renderFinal();if(lock)lock.release().catch(()=>{})}
 }
 $("pasteToggle").addEventListener("click",()=>{$("pasteBox").hidden=!$("pasteBox").hidden;if(!$("pasteBox").hidden)$("pasteText").focus()});
