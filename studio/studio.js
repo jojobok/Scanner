@@ -53,7 +53,14 @@ async function sendToBot(scene,req){
   }catch(err){req.cloud="error";req.cloud_error=err.message}
   save();render();
 }
-let polling=false;
+let polling=false,importError=null;
+// a file already stored on this device (e.g. after an interrupted import) but missing from the draft
+function adoptStored(rec){
+  const known=project.media.find(m=>m.id===rec.id);if(known)return known;
+  const entry={id:rec.id,request_id:rec.requestId||null,scene_uid:null,type:rec.type,name:rec.name,mime:rec.mime,size:rec.size,
+    sha256:rec.sha256,added_at:rec.added_at||new Date().toISOString(),reason:null};
+  project.media.push(entry);return entry;
+}
 async function pollBot(){
   if(polling||!CLOUD.state.available||document.hidden)return;
   polling=true;let changed=false;
@@ -76,11 +83,17 @@ async function pollBot(){
         const imported=req.cloud_imported||(req.cloud_imported=[]);
         for(const f of st.files||[]){
           if(imported.includes(f.file_id))continue;
-          const blob=await CLOUD.file(f.file_id);
-          const res=await storeFile(new File([blob],f.name,{type:f.mime}),null,req.id);
+          let res;
+          try{
+            const blob=await CLOUD.file(f.file_id);
+            res=await storeFile(new File([blob],f.name,{type:f.mime}),null,req.id);
+          }catch(err){importError="הורדת "+f.name+" נכשלה: "+(err&&err.message||err);changed=true;continue}
+          if(res.error){importError=f.name+": "+res.error;changed=true;continue}
           imported.push(f.file_id);
+          if(res.duplicate&&!project.media.includes(res.duplicate))res.entry=adoptStored(res.duplicate);
+          else if(res.duplicate)res.entry=res.duplicate;
           if(res.entry){res.entry.remote_file_id=f.file_id;linkToRequest(res.entry,scene,req)}
-          else if(res.duplicate){req.status="received"}
+          importError=null;save();
           if(req.then_video){ // automatic mode: approve the image; the server already queued its video
             const media=res.entry||res.duplicate;
             if(media&&media.id)scene.approved_media_id=media.id;
@@ -184,10 +197,13 @@ $("writeScript").addEventListener("click",writeScript);
 function sceneVideo(scene){return [...project.media].reverse().find(m=>m.type==="V"&&m.scene_uid===scene.uid)}
 function renderFinal(){
   const total=project.scenes.length,ready=project.scenes.filter(sceneVideo).length;
-  $("finalInfo").textContent=!total?"אין עדיין סצנות.":ready===total?"כל "+total+" הסצנות מוכנות. אפשר להרכיב.":ready+" מתוך "+total+" הסצנות מוכנות.";
+  $("finalInfo").textContent=(!total?"אין עדיין סצנות.":ready===total?"כל "+total+" הסצנות מוכנות. אפשר להרכיב.":ready+" מתוך "+total+" הסצנות מוכנות.")
+    +(importError?" ⚠ "+importError:"")+(storageNote?" · "+storageNote:"");
   $("assemble").disabled=!ready;
 }
-let finalUrl=null,assembling=false;
+let finalUrl=null,assembling=false,storageNote="";
+if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{
+  if(e&&e.quota){storageNote="אחסון: "+Math.round(e.usage/1048576)+"MB מתוך "+Math.round(e.quota/1048576)+"MB";renderFinal()}}).catch(()=>{});
 function finalSignature(){return project.scenes.map(s=>{const m=sceneVideo(s);return m?m.id:"-"}).join("|")}
 function maybeAutoAssemble(){
   if(assembling||document.hidden||!project.scenes.length||!project.scenes.every(sceneVideo))return;
@@ -253,6 +269,11 @@ function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36
       name:r.file.name,mime:r.file.mime,size:r.file.size,sha256:null,added_at:r.file.received_at||r.created_at,reason:null})}));
     changed=true;
   }
+  project.scenes.forEach(s=>s.requests.forEach(r=>{
+    if(r.status==="received"&&r.cloud&&!project.media.some(m=>m.request_id===r.id&&m.scene_uid===s.uid)){
+      r.status="waiting";r.cloud="queued";r.cloud_imported=[];changed=true;
+    }
+  }));
   if(changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
 })();
 $("portion").value = project.portion || "";
