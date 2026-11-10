@@ -73,16 +73,19 @@ async function pollBot(){
         else if(st.status==="claimed"&&sr.cloud_seen!=="claimed"){sr.cloud_seen="claimed";changed=true}}catch(_){}
     }
     for(const scene of project.scenes){
-      for(const req of scene.requests.filter(r=>r.status==="waiting"&&r.cloud==="queued")){
+      // also re-check every video request of a scene that still has no video on this device, whatever its local state
+      // (after_image / failed / superseded can be stale when the app was closed while the bot worked)
+      const noVideo=!sceneVideo(scene);
+      for(const req of scene.requests.filter(r=>(r.status==="waiting"&&r.cloud==="queued")||(noVideo&&r.type==="V"&&r.cloud&&r.status!=="received"))){
         let st;try{st=await CLOUD.status(req.id)}catch(_){continue}
-        if(st.status==="failed"){req.cloud="failed";req.cloud_error=st.error;changed=true;
+        if(st.status==="failed"&&req.cloud!=="failed"){req.cloud="failed";req.cloud_error=st.error;changed=true;
           const follow=req.then_video&&scene.requests.find(r=>r.id===req.then_video.id&&r.cloud==="after_image");
           if(follow){follow.cloud="failed";follow.cloud_error="יצירת התמונה נכשלה"}
           continue}
         if(st.status==="claimed"&&req.cloud_seen!=="claimed"){req.cloud_seen="claimed";changed=true}
         const imported=req.cloud_imported||(req.cloud_imported=[]);
         for(const f of st.files||[]){
-          if(imported.includes(f.file_id))continue;
+          if(imported.includes(f.file_id)&&!(noVideo&&req.type==="V"))continue; // a video the scene lost is fetched again
           let res;
           try{
             const blob=await CLOUD.file(f.file_id);
@@ -197,7 +200,8 @@ $("writeScript").addEventListener("click",writeScript);
 function sceneVideo(scene){return [...project.media].reverse().find(m=>m.type==="V"&&m.scene_uid===scene.uid)}
 function renderFinal(){
   const total=project.scenes.length,ready=project.scenes.filter(sceneVideo).length;
-  $("finalInfo").textContent=(!total?"אין עדיין סצנות.":ready===total?"כל "+total+" הסצנות מוכנות. אפשר להרכיב.":ready+" מתוך "+total+" הסצנות מוכנות.")
+  const missing=project.scenes.map((s,i)=>sceneVideo(s)?0:i+1).filter(Boolean);
+  $("finalInfo").textContent=(!total?"אין עדיין סצנות.":ready===total?"כל "+total+" הסצנות מוכנות. אפשר להרכיב.":ready+" מתוך "+total+" הסצנות מוכנות. חסרות: "+missing.join(", ")+".")
     +(importError?" ⚠ "+importError:"")+(storageNote?" · "+storageNote:"");
   $("assemble").disabled=!ready;
 }
