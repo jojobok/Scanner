@@ -14,22 +14,38 @@
   function supported() {
     return typeof MediaRecorder !== "undefined" && !!document.createElement("canvas").captureStream;
   }
+  // iOS Safari does not load a video it was not asked to play: start it muted (allowed without a tap),
+  // then pause and seek to the start point. Every wait has a timeout, so a bad clip never hangs the job.
   function prepare(blob, start) {
     return new Promise((resolve, reject) => {
       const v = document.createElement("video");
-      v.muted = true; v.playsInline = true; v.preload = "auto";
+      v.muted = true; v.defaultMuted = true; v.playsInline = true; v.preload = "auto";
       v.setAttribute("playsinline", ""); v.setAttribute("muted", "");
+      v.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none";
+      document.body.append(v);
       const url = URL.createObjectURL(blob);
-      const fail = () => { URL.revokeObjectURL(url); reject(new Error("לא הצלחתי לפתוח את אחד הסרטונים")); };
-      v.addEventListener("error", fail, { once: true });
-      v.addEventListener("loadeddata", () => {
-        v.currentTime = Math.min(start, Math.max(0, (v.duration || 0) - 0.1));
-        v.addEventListener("seeked", () => resolve({ v, url }), { once: true });
-      }, { once: true });
-      v.src = url;
+      let settled = false;
+      const ok = () => { if (settled) return; settled = true; clearTimeout(limit); resolve({ v, url }); };
+      const fail = msg => { if (settled) return; settled = true; clearTimeout(limit); release({ v, url }); reject(new Error(msg)); };
+      const limit = setTimeout(() => v.readyState >= 2 ? ok() : fail("טעינת אחד הסרטונים ארכה יותר מדי"), 20000);
+      v.addEventListener("error", () => fail("לא הצלחתי לפתוח את אחד הסרטונים"), { once: true });
+      let ready = false;
+      const onReady = () => {
+        if (ready) return; ready = true;
+        v.pause();
+        const target = Math.min(start, Math.max(0, (v.duration || 0) - 0.1));
+        if (Math.abs(v.currentTime - target) < 0.05) return ok();
+        v.addEventListener("seeked", ok, { once: true });
+        v.currentTime = target;
+        setTimeout(ok, 1500);
+      };
+      v.addEventListener("loadeddata", onReady, { once: true });
+      v.addEventListener("playing", onReady, { once: true });
+      v.src = url; v.load();
+      const p = v.play(); if (p && p.catch) p.catch(() => {});
     });
   }
-  function release(c) { if (!c) return; try { c.v.pause(); c.v.removeAttribute("src"); c.v.load(); } catch (_) {} URL.revokeObjectURL(c.url); }
+  function release(c) { if (!c) return; try { c.v.pause(); c.v.removeAttribute("src"); c.v.load(); c.v.remove(); } catch (_) {} URL.revokeObjectURL(c.url); }
   function cover(ctx, v, W, H, alpha) {
     const vw = v.videoWidth || W, vh = v.videoHeight || H, r = Math.max(W / vw, H / vh);
     const dw = vw * r, dh = vh * r;
@@ -50,6 +66,7 @@
     const rec = new MediaRecorder(canvas.captureStream(o.fps), Object.assign({ videoBitsPerSecond: o.bitrate }, mime ? { mimeType: mime } : {}));
     const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise(r => { rec.onstop = r; });
+    if (o.onProgress) o.onProgress(0, 1, n);
     let cur = await prepare(blobs[0], o.start), next = n > 1 ? prepare(blobs[1], o.start) : null, nextClip = null;
     rec.start(1000);
     await cur.v.play().catch(() => {});
