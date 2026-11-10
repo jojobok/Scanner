@@ -69,7 +69,10 @@ test("video request requires the approved image upload, bot can read it", async 
   const job = (await (await bot(env, "/api/bot/next")).json()).requests[0];
   assert.equal(job.type, "video"); assert.ok(job.source_image_url.endsWith("/api/bot/source/" + img));
   assert.equal((await bot(env, new URL(job.source_image_url).pathname)).status, 200);
-  assert.equal((await bot(env, "/api/bot/fail/" + vid, { method: "POST", body: JSON.stringify({ error: "quota reached" }) })).status, 200);
+  const failOnce = async () => (await (await bot(env, "/api/bot/fail/" + vid, { method: "POST", body: JSON.stringify({ error: "quota reached" }) })).json());
+  assert.equal((await failOnce()).retry, true, "first failure goes back to the queue");
+  assert.equal((await (await owner(env, "/api/requests/" + vid)).json()).status, "queued");
+  for (let i = 0; i < 2; i++) { assert.equal((await (await bot(env, "/api/bot/next")).json()).requests.length, 1); await failOnce(); }
   const st = await (await owner(env, "/api/requests/" + vid)).json();
   assert.equal(st.status, "failed"); assert.equal(st.error, "quota reached");
 });

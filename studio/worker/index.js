@@ -18,6 +18,7 @@ const SR = globalThis.StudioRequests;
 
 export const MAX_BYTES = 25 * 1024 * 1024; // Workers KV value limit
 const CLAIM_MINUTES = 30;
+const MAX_ATTEMPTS = 3; // bot runs that may try one request
 // same security headers and CSP as the previously deployed studio worker
 const SECURITY = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" };
 const CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src https: blob:; media-src https: blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
@@ -244,6 +245,12 @@ async function botApi(request, env, url) {
     const r = await getJSON(env, "req:" + m[1]);
     if (!r) return fail(404, "unknown request");
     let msg = ""; try { msg = String((await request.json()).error || ""); } catch (_) {}
+    // Grok sometimes fails transiently: put the job back for the next bot run, up to MAX_ATTEMPTS in total.
+    if ((r.attempts || 0) < MAX_ATTEMPTS) {
+      r.status = "queued"; r.claimed_at = null; r.last_error = msg.slice(0, 500) || "failed";
+      await putReq(env, r);
+      return json({ ok: true, retry: true });
+    }
     r.status = "failed"; r.error = msg.slice(0, 500) || "failed"; r.done_at = new Date().toISOString();
     await putReq(env, r);
     return json({ ok: true });

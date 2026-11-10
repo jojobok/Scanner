@@ -45,6 +45,9 @@
     <p id="autoStatus" class="status" role="status"></p>
   </section>
   <section class="panel"><h2>לוח סצנות</h2><p class="notice">תסריט הדגמה בלבד, המבוסס על תבנית הבדיקה של Scanner. אינו תסריט תורני מאומת. יצירה ב־Grok נעשית בדפדפן, בחשבון הקיים שלך, בלי API בתשלום: "צור תמונה" מכין פרומפט, "העתק ופתח ב־Grok" מעתיק אותו ופותח את Grok, ואת התוצר מצרפים בחזרה ב"צרף תוצר מ־Grok". האולפן לא נכנס לחשבון Grok, לא שומר פרטי התחברות ולא מפעיל את Grok אוטומטית. טיוטות וקבצים נשמרים במכשיר זה בלבד. (אפשר עדיין להשתמש בהוראה ל־Grok Bot.)</p><div id="scenes"></div></section>
+  <section class="panel"><h2>סרטון סופי</h2><p id="finalInfo" class="status"></p>
+    <div class="actions"><button id="assemble" class="primary" type="button">הרכב סרטון</button></div>
+    <p id="finalStatus" class="status" role="status"></p><div id="finalResult" hidden></div></section>
   <section class="panel"><h2>קליטת תוצרים</h2><p class="notice">ייבוא מרוכז: בחר את הקבצים ש־Grok Bot שמר בתיקיית Studio-Intake (באפליקציית Files ← Google Drive) או קבצים מהמכשיר. קובץ עם מזהה בקשה תקין משויך לסצנה שלו אוטומטית; כל השאר ממתינים כאן לשיוך ידני. כל קובץ נשמר כגרסה נפרדת, וקבצים זהים לא נשמרים פעמיים.</p>
     <div class="actions"><button id="importPick" class="primary" type="button">ייבא קבצים</button><input id="importFiles" type="file" accept="image/*,video/*" multiple hidden></div>
     <p id="importStatus" class="status" role="status"></p><div id="intake"></div></section>
@@ -53,6 +56,7 @@
 <script src="./grok.js" defer></script>
 <script src="./media.js" defer></script>
 <script src="./cloud.js" defer></script>
+<script src="./assemble.js" defer></script>
 <script src="./studio.js" defer></script>
 </body>
 </html>
