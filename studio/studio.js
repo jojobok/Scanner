@@ -93,7 +93,7 @@ async function pollBot(){
       }
     }
   }finally{polling=false}
-  if(changed){save();render();renderIntake();renderScript()}
+  if(changed){save();render();renderIntake();renderScript();renderFinal()}
 }
 // One button: every scene that has an image prompt and no video yet gets an image request whose
 // video is queued by the server as soon as the image arrives; scenes with an approved image get a video.
@@ -150,7 +150,7 @@ function applyScript(){
     shot_type:x.shot_type,on_screen_text:x.on_screen_text,approved:false,requests:[]}));
   project.title=sc.title||project.title;$("title").value=project.title||"";
   project.characters=sc.characters;project.script_info={theme:sc.theme,message:sc.message,anchor_verse:sc.anchor_verse};
-  sr.cloud="applied";expandedScene=null;save();render();renderIntake();renderScript();
+  sr.cloud="applied";expandedScene=null;save();render();renderIntake();renderScript();renderFinal();
 }
 function renderScript(){
   const sr=project.script_request,box=$("scriptPreview");box.replaceChildren();box.hidden=true;
@@ -178,6 +178,42 @@ function renderScript(){
   actions.append(apply,again);box.append(actions);box.hidden=false;
 }
 $("writeScript").addEventListener("click",writeScript);
+// ---- final video: the newest video of every scene, joined on this device
+function sceneVideo(scene){return [...project.media].reverse().find(m=>m.type==="V"&&m.scene_uid===scene.uid)}
+function renderFinal(){
+  const total=project.scenes.length,ready=project.scenes.filter(sceneVideo).length;
+  $("finalInfo").textContent=!total?"אין עדיין סצנות.":ready===total?"כל "+total+" הסצנות מוכנות. אפשר להרכיב.":ready+" מתוך "+total+" הסצנות מוכנות.";
+  $("assemble").disabled=!ready;
+}
+let finalUrl=null;
+$("assemble").addEventListener("click",async()=>{
+  const A=window.StudioAssemble,btn=$("assemble"),st=$("finalStatus"),box=$("finalResult");
+  if(!A||!A.supported()){st.textContent="הדפדפן הזה לא תומך בהרכבת וידאו.";return}
+  const missing=project.scenes.map((s,i)=>sceneVideo(s)?0:i+1).filter(Boolean);
+  if(missing.length&&!confirm("אין עדיין סרטון בסצנות "+missing.join(", ")+". להרכיב בלעדיהן?"))return;
+  const blobs=[];
+  for(const s of project.scenes){const m=sceneVideo(s);if(!m)continue;const rec=await MEDIA.get(m.id).catch(()=>null);if(rec&&rec.blob)blobs.push(rec.blob)}
+  if(!blobs.length){st.textContent="הסרטונים לא שמורים במכשיר הזה.";return}
+  let lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request("screen")}catch(_){}
+  btn.disabled=true;box.hidden=true;st.textContent="מתחיל להרכיב. השאר את המסך פתוח עד הסוף.";
+  try{
+    const res=await A.assemble(blobs,{onProgress:(p,k,n)=>{st.textContent="מרכיב שוט "+k+" מתוך "+n+" · "+Math.round(p*100)+"% · השאר את המסך פתוח"}});
+    if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(res.blob);
+    const ext=res.mime==="video/mp4"?".mp4":".webm",name=((project.title||"scanner-studio").replace(/[\\/:*?"<>|]+/g," ").trim()||"scanner-studio")+ext;
+    const file=new File([res.blob],name,{type:res.mime});
+    box.replaceChildren();
+    const v=document.createElement("video");v.src=finalUrl;v.controls=true;v.playsInline=true;v.style.width="100%";v.style.borderRadius="12px";
+    const actions=document.createElement("div");actions.className="actions";
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      const share=document.createElement("button");share.type="button";share.className="primary";share.textContent="שמור / שתף";
+      share.addEventListener("click",()=>navigator.share({files:[file],title:project.title||"Scanner Studio"}).catch(()=>{}));actions.append(share);
+    }
+    const a=document.createElement("a");a.href=finalUrl;a.download=name;a.className="button-link secondary";a.textContent="הורד קובץ";actions.append(a);
+    box.append(v,actions);box.hidden=false;
+    st.textContent="הסרטון מוכן: "+blobs.length+" שוטים, "+Math.round(res.seconds)+" שניות, "+(res.blob.size/1048576).toFixed(0)+"MB.";
+  }catch(err){st.textContent="ההרכבה נכשלה: "+err.message}
+  finally{btn.disabled=false;renderFinal();if(lock)lock.release().catch(()=>{})}
+});
 $("pasteToggle").addEventListener("click",()=>{$("pasteBox").hidden=!$("pasteBox").hidden;if(!$("pasteBox").hidden)$("pasteText").focus()});
 $("pasteCheck").addEventListener("click",()=>{
   let script;
@@ -188,7 +224,7 @@ $("pasteCheck").addEventListener("click",()=>{
 });
 $("theme").value=project.theme||"";
 $("theme").addEventListener("input",()=>{project.theme=$("theme").value;save()});
-renderScript();
+renderScript();renderFinal();
 CLOUD.health().then(st=>{if(st.available){render();pollBot();setInterval(pollBot,20000)}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollBot()});
 function sceneUid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
