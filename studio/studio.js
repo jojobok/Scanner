@@ -94,6 +94,7 @@ async function pollBot(){
     }
   }finally{polling=false}
   if(changed){save();render();renderIntake();renderScript();renderFinal()}
+  maybeAutoAssemble();
 }
 // One button: every scene that has an image prompt and no video yet gets an image request whose
 // video is queued by the server as soon as the image arrives; scenes with an approved image get a video.
@@ -151,6 +152,7 @@ function applyScript(){
   project.title=sc.title||project.title;$("title").value=project.title||"";
   project.characters=sc.characters;project.script_info={theme:sc.theme,message:sc.message,anchor_verse:sc.anchor_verse};
   sr.cloud="applied";expandedScene=null;save();render();renderIntake();renderScript();renderFinal();
+  autoProduce(); // one button: approve the script -> images and videos are produced by the bot automatically
 }
 function renderScript(){
   const sr=project.script_request,box=$("scriptPreview");box.replaceChildren();box.hidden=true;
@@ -171,7 +173,7 @@ function renderScript(){
   sc.shots.forEach(x=>{const li=document.createElement("li");li.textContent=(x.shot_type?"["+x.shot_type+"] ":"")+(x.narration||x.image_prompt);ol.append(li)});
   box.append(ol);
   const actions=document.createElement("div");actions.className="actions";
-  const apply=document.createElement("button");apply.type="button";apply.className="primary";apply.textContent="החל את התסריט ("+sc.shots.length+" שוטים)";
+  const apply=document.createElement("button");apply.type="button";apply.className="primary";apply.textContent="אשר תסריט והתחל הפקה ("+sc.shots.length+" שוטים)";
   apply.addEventListener("click",applyScript);
   const again=document.createElement("button");again.type="button";again.className="secondary";again.textContent="כתוב תסריט אחר";
   again.addEventListener("click",writeScript);
@@ -185,17 +187,28 @@ function renderFinal(){
   $("finalInfo").textContent=!total?"אין עדיין סצנות.":ready===total?"כל "+total+" הסצנות מוכנות. אפשר להרכיב.":ready+" מתוך "+total+" הסצנות מוכנות.";
   $("assemble").disabled=!ready;
 }
-let finalUrl=null;
-$("assemble").addEventListener("click",async()=>{
+let finalUrl=null,assembling=false;
+function finalSignature(){return project.scenes.map(s=>{const m=sceneVideo(s);return m?m.id:"-"}).join("|")}
+function maybeAutoAssemble(){
+  if(assembling||document.hidden||!project.scenes.length||!project.scenes.every(sceneVideo))return;
+  if(project.final_sig===finalSignature())return;
+  runAssemble(true);
+}
+$("assemble").addEventListener("click",()=>runAssemble(false));
+async function runAssemble(auto){
+  if(assembling)return;
+  assembling=true;try{await assembleNow(auto)}finally{assembling=false}
+}
+async function assembleNow(auto){
   const A=window.StudioAssemble,btn=$("assemble"),st=$("finalStatus"),box=$("finalResult");
   if(!A||!A.supported()){st.textContent="הדפדפן הזה לא תומך בהרכבת וידאו.";return}
   const missing=project.scenes.map((s,i)=>sceneVideo(s)?0:i+1).filter(Boolean);
-  if(missing.length&&!confirm("אין עדיין סרטון בסצנות "+missing.join(", ")+". להרכיב בלעדיהן?"))return;
+  if(missing.length&&(auto||!confirm("אין עדיין סרטון בסצנות "+missing.join(", ")+". להרכיב בלעדיהן?")))return;
   const blobs=[];
   for(const s of project.scenes){const m=sceneVideo(s);if(!m)continue;const rec=await MEDIA.get(m.id).catch(()=>null);if(rec&&rec.blob)blobs.push(rec.blob)}
   if(!blobs.length){st.textContent="הסרטונים לא שמורים במכשיר הזה.";return}
   let lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request("screen")}catch(_){}
-  btn.disabled=true;box.hidden=true;st.textContent="מתחיל להרכיב. השאר את המסך פתוח עד הסוף.";
+  btn.disabled=true;box.hidden=true;st.textContent=(auto?"כל הסרטונים הגיעו. ":"")+"מתחיל להרכיב. השאר את המסך פתוח עד הסוף.";
   try{
     const res=await A.assemble(blobs,{onProgress:(p,k,n)=>{st.textContent="מרכיב שוט "+k+" מתוך "+n+" · "+Math.round(p*100)+"% · השאר את המסך פתוח"}});
     if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(res.blob);
@@ -210,10 +223,12 @@ $("assemble").addEventListener("click",async()=>{
     }
     const a=document.createElement("a");a.href=finalUrl;a.download=name;a.className="button-link secondary";a.textContent="הורד קובץ";actions.append(a);
     box.append(v,actions);box.hidden=false;
+    project.final_sig=finalSignature();save();
+    if(auto)$("finalStatus").closest("section").scrollIntoView({behavior:"smooth",block:"start"});
     st.textContent="הסרטון מוכן: "+blobs.length+" שוטים, "+Math.round(res.seconds)+" שניות, "+(res.blob.size/1048576).toFixed(0)+"MB.";
   }catch(err){st.textContent="ההרכבה נכשלה: "+err.message}
   finally{btn.disabled=false;renderFinal();if(lock)lock.release().catch(()=>{})}
-});
+}
 $("pasteToggle").addEventListener("click",()=>{$("pasteBox").hidden=!$("pasteBox").hidden;if(!$("pasteBox").hidden)$("pasteText").focus()});
 $("pasteCheck").addEventListener("click",()=>{
   let script;
